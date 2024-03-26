@@ -39,13 +39,16 @@ grid <- generate_polygons(country_ea, shape = POLY_SHAPE, area = POLY_SIZE)
 fc <- rast(here("data", "raw", "raster", "gfc", "GFC_cover_Colombia_mosaic.tif"))
 
 fc_agg <- fc %>%
-  terra::aggregate(fact = 3, cores = 4) %>%
+  terra::aggregate(fact = 3, cores = 8) %>%
   project(crs(country_ea)) %>%
   mask(country_ea)
+writeRaster(fc_agg, here("data", "processed", "raster", "fc_agg.tif"))
+
+fc_agg <- rast(here("data", "processed", "raster", "fc_agg.tif"))
 
 fc_threshold <- as.numeric(fc_agg > 30)
 
-non_forest <- fc_threshold == 0
+# non_forest <- fc_threshold == 0
 
 # Detect patches
 
@@ -57,9 +60,19 @@ non_forest_patches <- landscapemetrics::get_patches(
 )[[1]][[1]]
 tictoc::toc()
 
-patch_area <- lsm_p_area(non_forest_patches)
+tictoc::tic()
+patch_area <- fc_threshold$Y2000 %>%
+  lsm_p_area() %>%
+  filter(class == 0) %>%
+  select(id, value)
+  
+tictoc::toc()
+readr::write_rds(patch_area, here("data", "processed", "patch_area_Colombia.rds"))
 
-writeRaster(fc_agg, here("data", "processed", "raster", "fc_agg.tif"))
+# Reclassify nonforest patch values to area
+
+non_forest_patch_area <- classify(non_forest_patches, rcl = patch_area)
+
 
 ## Filter polygons to those with > FC_THRESHOLD forest cover --------
 
