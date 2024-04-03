@@ -7,6 +7,7 @@ library(landscapemetrics)
 library(here)
 library(dplyr)
 library(tmap)
+library(tictoc)
 
 source(here("scripts", "R", "generate_polygons.R"))
 
@@ -17,6 +18,7 @@ POLY_SIZE <- 10000 # hectares
 POLY_SHAPE <- "hex"  # square or hex
 SAMPLE_N <- 1000  # number of sample polygons
 FC_THRESHOLD <- 40  # Minimum forest cover to include polygons in sample (%)
+FOREST_EDGE_AREA <- 100000 # Minimum contiguous nonforest area to define as forest edge, hectares
 OUTPUT_PATH <- here("data", "processed", "vector", "sample_polygons")
 SAMPLE_SEED <- 111
 
@@ -38,11 +40,11 @@ grid <- generate_polygons(country_ea, shape = POLY_SHAPE, area = POLY_SIZE)
 # Raster should be "closed", i.e., not contain small holes
 fc <- rast(here("data", "raw", "raster", "gfc", "GFC_cover_Colombia_mosaic.tif"))
 
-fc_agg <- fc %>%
-  terra::aggregate(fact = 3, cores = 8) %>%
-  project(crs(country_ea)) %>%
-  mask(country_ea)
-writeRaster(fc_agg, here("data", "processed", "raster", "fc_agg.tif"))
+# fc_agg <- fc %>%
+#   terra::aggregate(fact = 3, cores = 8) %>%
+#   project(crs(country_ea)) %>%
+#   mask(country_ea)
+# writeRaster(fc_agg, here("data", "processed", "raster", "fc_agg.tif"))
 
 fc_agg <- rast(here("data", "processed", "raster", "fc_agg.tif"))
 
@@ -52,27 +54,30 @@ fc_threshold <- as.numeric(fc_agg > 30)
 
 # Detect patches
 
-tictoc::tic()
+tic()
 non_forest_patches <- landscapemetrics::get_patches(
   fc_threshold$Y2000,
   class = 0,
   to_disk = TRUE
 )[[1]][[1]]
-tictoc::toc()
+toc()
 
-tictoc::tic()
-patch_area <- fc_threshold$Y2000 %>%
-  lsm_p_area() %>%
-  filter(class == 0) %>%
-  select(id, value)
-  
-tictoc::toc()
-readr::write_rds(patch_area, here("data", "processed", "patch_area_Colombia.rds"))
+# tic()
+# patch_area <- fc_threshold$Y2000 %>%
+#   lsm_p_area() %>%
+#   filter(class == 0) %>%
+#   select(id, value)
+#   
+# toc()
+# readr::write_rds(patch_area, here("data", "processed", "patch_area_Colombia.rds"))
 
 # Reclassify nonforest patch values to area
+patch_area <- readr::read_rds(here("data", "processed", "patch_area_Colombia.rds"))
+patch_area_large <- filter(patch_area, value >= FOREST_EDGE_AREA)
 
-non_forest_patch_area <- classify(non_forest_patches, rcl = patch_area)
-
+tic()
+non_forest_patch_area <- classify(non_forest_patches, rcl = patch_area_large)
+toc()
 
 ## Filter polygons to those with > FC_THRESHOLD forest cover --------
 
