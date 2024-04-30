@@ -242,4 +242,4 @@ sample_polygons <- function(x, n, strata = NULL) {
   
 }
 
-# A tiny change
+
