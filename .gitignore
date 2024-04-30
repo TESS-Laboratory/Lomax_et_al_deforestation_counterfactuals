@@ -1,3 +1,5 @@
+# Ignore all these
+
 .Rproj.user
 .Rhistory
 .RData
@@ -5,3 +7,6 @@
 
 /data/
 /results/
+
+# Sync the following files
+!/data/raw/csv/REDD_database.xls
