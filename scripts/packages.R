@@ -1,3 +1,7 @@
+# data download
+library(rstac)
+library(rsi)
+
 # data reading and management
 library(magrittr)
 library(dplyr)
