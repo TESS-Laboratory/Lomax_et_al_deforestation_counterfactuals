@@ -5,5 +5,9 @@
 .RData
 .Ruserdata
 
-/data/
-/results/
+data/*
+results/
+
+# Except these files
+
+!data/REDD_database.xlsx
