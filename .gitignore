@@ -7,6 +7,3 @@
 
 /data/
 /results/
-
-# Sync the following files
-!/data/raw/csv/REDD_database.xlsx
