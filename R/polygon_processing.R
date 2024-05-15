@@ -101,12 +101,10 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
         force_df = TRUE,
         full_colnames = TRUE,
         coverage_area = TRUE,
-        append_cols = id_col
+        append_cols = id_col,
+        max_cells_in_memory = 3e+08
       ) %>%
       rename_with(.cols = starts_with(fun), ~ gsub(paste0(fun, "."), "", .x))
-    
-    output <- grid %>%
-      full_join(extract)
     
   } else if (is_function(fun)) {
     
@@ -121,17 +119,18 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
        force_df = TRUE,
        coverage_area = TRUE,
        summarize_df = TRUE,
-       append_cols = "ID"
+       append_cols = "ID",
+       max_cells_in_memory = 3e+08
      )
-   
-   output <- grid %>%
-     full_join(extract)
    
   } else {
     
     stop("'fun' is not a valid function")
     
   }
+  
+  output <- grid %>%
+    full_join(extract)
   
   output
 }
@@ -176,6 +175,10 @@ sum_by_value <- function(df, wide = FALSE) {
   }
 }
 
+#' @title Clean NAs
+#' @description Repairs NA values left from incomplete matching after joining
+#' two data frames.
+
 #' @title Calculate cumulative deforestation
 #' @description
 #' Calculates cumulative deforestation in a set of polygons from
@@ -198,12 +201,12 @@ calc_cumulative_defor <- function(x, start, area_col, after = FALSE) {
     frac_defor <- x %>%
       group_by(ID) %>%
       filter(cell_value != 0) %>%
-      summarise(cum_defor = sum(.data[[area_col]] * (cell_value <= start_val)))
+      summarise(cum_defor = sum(.data[[area_col]] * (cell_value <= start_val), na.rm = T))
     
   } else {
     frac_defor <- x %>%
       group_by(ID) %>%
-      summarise(cum_defor = sum(.data[[area_col]] * (cell_value > start_val)))
+      summarise(cum_defor = sum(.data[[area_col]] * (cell_value > start_val), na.rm = T))
   }
   
   if (any(class(x) == "sf")) {
@@ -225,21 +228,21 @@ calc_cumulative_defor <- function(x, start, area_col, after = FALSE) {
 #' @param strata character. The column on which to stratify
 #' 
 
-sample_polygons <- function(x, n, strata = NULL) {
+sample_polygons <- function(x, n, strata_col = NULL, strata = 5) {
   if (n >= nrow(x)) {
     warning("Requested n exceeds number of polygons in x")
   }
   
-  if (is.null(strata)) {
+  if (is.null(strata_col)) {
+    
     slice_sample(x, n = n)
+    
   } else {
+    
     x %>%
-    mutate(quantile = cut_number(.data[[strata]], n = 5, labels = FALSE)) %>%
-      slice_sample(n = SAMPLE_N / 5, by = quantile) %>%
-      left_join(x) %>%
-      st_as_sf()
+    mutate(quantile = cut_number(.data[[strata_col]], n = strata, labels = FALSE)) %>%
+      slice_sample(n = SAMPLE_N / strata, by = quantile)
+    
   }
   
 }
-
-# Is bypassing disallowed?

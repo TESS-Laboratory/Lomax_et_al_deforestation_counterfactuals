@@ -13,7 +13,7 @@ COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when gener
 POLY_SIZE <- 100000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
 POLY_BUFFER <- 10 # polygon buffer distance in km
-SAMPLE_N <- 500  # number of polygons to sample
+SAMPLE_N <- 100  # number of polygons to sample
 FC_THRESHOLD <- 20  # Minimum forest cover to include polygons in sample (%)
 FOREST_EDGE_AREA <- 100 # Minimum continuous nonforest area to define as forest edge, hectares
 OUTPUT_PATH <- "data/processed/vector/sample_polygons"  # Output directory
@@ -30,10 +30,9 @@ fc_loss <- get_raster(COUNTRY, folder = "gfc", layer = "lossyear")
 #   crop(fc)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
-rivers <- get_vector("Lin2021_rivers", country_poly = country) %>%
-  filter(strmOrder >= 4) %>%
-  st_filter(country)
-
+# rivers <- get_vector("Lin2021_rivers", country_poly = country) %>%
+#   filter(strmOrder >= 4) %>%
+#   st_filter(country)
 
 ## Generate polygon grids --------
 
@@ -49,7 +48,6 @@ grid_buffer <- generate_buffers(grid, dist = POLY_BUFFER)
 ## Calculate forest cover and loss in polygon and buffer regions --------
 
 # Convert forest cover percentage to binary layer using 50% threshold
-# Remove plantations planted prior to 2000
 fc_binary <- fc %>%
   aggregate(fact = AGG) %>%
   is_greater_than(50) %>%
@@ -61,10 +59,10 @@ fc_binary <- fc %>%
 # NB: Currently removing all plantations (and with some reservations about
 # the dataset completeness)
 
-# Extract forest cover per polygon and filter to 
+# Extract forest cover per polygon and filter to threshold
 grid_fc <- grid %>%
   poly_extract(fc_binary) %>%
-  filter(treecover2000 >= (FC_THRESHOLD) / 100)
+  filter(treecover2000 >= FC_THRESHOLD / 100)
 
 grid_buffer_fc <- grid_buffer %>%
   filter(ID %in% grid_fc$ID) %>%
@@ -76,14 +74,18 @@ grid_fc_loss <- poly_extract(grid_fc, fc_loss, fun = sum_by_value)
 grid_buffer_fc_loss <- poly_extract(grid_buffer_fc, fc_loss, fun = sum_by_value) %>%
   rename(buffer_treecover2000 = treecover2000, buffer_area = area, buffer_area_frac = area_frac)
 
-grid_fc_loss_all <- full_join(grid_fc_loss, st_drop_geometry(grid_buffer_fc_loss))
+grid_fc_loss_all <- grid_fc_loss %>%
+  full_join(st_drop_geometry(grid_buffer_fc_loss)) %>%
+  replace_na(replace = list("area" = 0, "area_frac" = 0, "buffer_area" = 0, "buffer_area_frac = 0"))
 
-## Take random sample of polygons stratified by actual cumulative deforestation after start year --------
+## Take random sample of polygons stratified by actual cumulative deforestation up to start year --------
 
 set.seed(SEED)
 grid_sample <- grid_fc_loss_all %>%
-  calc_cumulative_defor(START_YEAR, area_col = "area_frac", after = TRUE) %>%
-  sample_polygons(n = SAMPLE_N, strata = "cum_defor")
+  calc_cumulative_defor(START_YEAR, area_col = "area_frac", after = FALSE) %>%
+  sample_polygons(n = SAMPLE_N, strata_col = "cum_defor", strata = 5) %>%
+  left_join(grid_fc_loss_all, by = "ID") %>%
+  st_as_sf()  # Re-attach geometry
 
-
+grid_sample_
 
