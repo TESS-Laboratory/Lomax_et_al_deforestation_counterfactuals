@@ -20,7 +20,7 @@ filt_redd_proj <- redd_proj %>%
 summary_REDD <- filt_redd_proj %>%
   group_by(country.name) %>%
   summarize(
-    total_area = sum(area),
+    total_area_ha = sum(area),
     #sum_B = sum(B),
     number_of_projects = n()
   )
@@ -28,5 +28,9 @@ summary_REDD <- filt_redd_proj %>%
 ##### add country codes ####
 ## correct panama ##
 summary_REDD$country.name <- gsub("Panamá", "Panama", summary_REDD$country.name)
-summary_REDD$country.code<- countrycode(summary_REDD$country.name, origin = "country.name", destination = "un")
-summary_REDD$region<- countrycode(summary_REDD$country.code, origin = "un", destination = "region")
+## add UN country codes ###
+summary_REDD$un.country.code<- countrycode(summary_REDD$country.name, origin = "country.name", destination = "un")
+## add region from 7 Regions as defined in the World Bank Development Indicators ##
+summary_REDD$region<- countrycode(summary_REDD$un.country.code, origin = "un", destination = "region")
+
+#### simplify tables for document ####
