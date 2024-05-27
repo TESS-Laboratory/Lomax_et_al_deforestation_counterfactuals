@@ -23,16 +23,30 @@ AGG <- 5 # Factor to aggregate rasters to speed calculation/test pipeline
 
 ## Load datasets --------
 
-country <- get_country(COUNTRY, crs = CRS)
-fc <- get_raster(COUNTRY, folder = "gfc", layer = "treecover2000")
-fc_loss <- get_raster(COUNTRY, folder = "gfc", layer = "lossyear")
-# plantations <- get_tiled_raster(folder = "plantations", layer = 1, names = "plantation_year") %>%
-#   crop(fc)
+# Country admin bouyndaries
+country <- gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>% st_as_sf()
+country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>% st_as_sf()
+
+# Raster data
+fc <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "treecover2000")
+fc_loss <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "lossyear")
+# plantations <- get_tiled_raster(folder = "data/raw/raster/plantations", layer = 1)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
+cropland <- get_tiled_raster("data/raw/raster/cropland")
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
-# rivers <- get_vector("Lin2021_rivers", country_poly = country) %>%
-#   filter(strmOrder >= 4) %>%
-#   st_filter(country)
+ppt <- get_raster("data/raw/raster/chirps", COUNTRY)
+tMean <- get_raster("data/raw/raster/era5", COUNTRY)
+travel_time_city <- get_raster("data/raw/raster/travel_time", "travel_time_to_cities_12")
+travel_time_port <- get_raster("data/raw/raster/travel_time", "travel_time_to_ports_5")
+population <- get_raster("data/raw/raster/population")
+
+# Vector data
+
+rivers <- get_vector("Lin2021_rivers", country_poly = country) %>%
+  filter(strmOrder >= 4) %>%
+  st_filter(country)
+roads <- get_vector("GRIP_roads", country_poly = country)
+protected_areas <- get_vector("protected_areas", country_name = COUNTRY, suffix = ".geojson")
 
 ## Generate polygon grids --------
 

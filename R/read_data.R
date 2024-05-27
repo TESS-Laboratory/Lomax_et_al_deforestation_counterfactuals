@@ -38,9 +38,8 @@ get_country <- function(country_name, crs = NULL, path = NULL) {
 ## TOO SLOW FOR VERY LARGE FILES - NEED TO FIND A WAY TO FILTER THEM BEFORE
 ## READING IN! MAYBE A LOOKUP TABLE?
 
-get_vector <- function(folder, country_name = NULL, country_poly = NULL) {
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  dir_files <- Sys.glob(paste0(dir_path, "/*.shp"))
+get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix = ".shp") {
+  dir_files <- Sys.glob(paste0(folder, "/*", suffix))
   
   if (!is.null(country_name)) {
     files <- dir_files[grepl(country_name, dir_files)]
@@ -80,12 +79,21 @@ get_vector <- function(folder, country_name = NULL, country_poly = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(country_name, folder, layer = NULL) {
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  dir_files <- list.files(dir_path)
-  country_file <- dir_files[grepl(country_name, dir_files)][1]
+get_raster <- function(folder, country_name = NULL, layer = NULL) {
+  dir_files <- Sys.glob(paste0(folder, "/*.tif*"))
   
-  raster <- rast(paste0(dir_path, "/", country_file))
+  if (!is.null(country_name)) {
+    filepath <- dir_files[grepl(country_name, dir_files)]
+  } else {
+    filepath <- dir_files
+  }
+  
+  if (length(filepath) > 1) {
+    warning(length(dir_files), " files found. Loading first file.")
+    filepath <- filepath[1]
+  }
+  
+  raster <- rast(filepath)
   
   if (!is.null(layer)) {
     raster <- raster[[layer]]
@@ -97,7 +105,7 @@ get_raster <- function(country_name, folder, layer = NULL) {
 #' @title Get raster from tiles
 #' @description 
 #' A function to find and load a Virtual Raster Dataset (VRT) from a collection
-#' of tile-based rasters. Thank you, Robert Hijmans!
+#' of tile-based rasters.
 #' 
 #' @usage get_tiled_raster(folder, layer = NULL)
 #' 
@@ -105,10 +113,9 @@ get_raster <- function(country_name, folder, layer = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target rasters.
 
-get_tiled_raster <- function(folder, layer = NULL, names = NULL) {
+get_tiled_raster <- function(folder, layer = NULL) {
   # Find raster tiles
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  tif_files <- Sys.glob(paste0(dir_path, "/*.tif"))
+  tif_files <- Sys.glob(paste0(folder, "/*.tif"))
   
   # Create virtual raster
   vrt <- vrt(tif_files)
@@ -116,10 +123,6 @@ get_tiled_raster <- function(folder, layer = NULL, names = NULL) {
   # Subset and/or rename layers
   if(!is.null(layer)) {
     vrt <- vrt[[layer]]
-  }
-  
-  if (!is.null(names)) {
-    names(vrt) <- names
   }
   
   # Return virtual raster dataset
@@ -139,7 +142,7 @@ get_tiled_raster <- function(folder, layer = NULL, names = NULL) {
 #' @param folder character. Then name of the output folder in "data/raw/raster/"
 #' 
 
-get_stac_raster <- function(country, collection, asset, folder = NULL, crs = NULL) {
+get_stac_raster <- function(collection, asset, country, folder = NULL, crs = NULL) {
   
   if(is.null(folder)) {
     folder <- collection
