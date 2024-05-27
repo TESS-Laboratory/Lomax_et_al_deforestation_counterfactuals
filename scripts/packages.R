@@ -1,6 +1,7 @@
 # data download
 library(rstac)
 library(rsi)
+library(geodata)
 
 # data reading and management
 library(magrittr)
