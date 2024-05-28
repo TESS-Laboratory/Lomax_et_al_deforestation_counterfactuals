@@ -23,7 +23,7 @@ AGG <- 5 # Factor to aggregate rasters to speed calculation/test pipeline
 
 ## Load datasets --------
 
-# Country admin bouyndaries
+# Country admin boundaries
 country <- gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>% st_as_sf()
 country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>% st_as_sf()
 
@@ -47,6 +47,13 @@ rivers <- get_vector("Lin2021_rivers", country_poly = country) %>%
   st_filter(country)
 roads <- get_vector("GRIP_roads", country_poly = country)
 protected_areas <- get_vector("protected_areas", country_name = COUNTRY, suffix = ".geojson")
+redd_proj <- read_csv("data/REDD_database_no_meta.csv") %>%
+  filter(!is.na(Longitude)) %>%
+  filter(`country name` == COUNTRY) %>%
+  filter(grepl("REDD", project_type)) %>%
+  filter(Status_2022 %in% c("Ongoing", "Ended")) %>%
+  mutate(area = as.numeric(area)) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = "EPSG:4326")
 
 ## Generate polygon grids --------
 
@@ -54,17 +61,35 @@ grid <- generate_polygons(
   country,
   buffer = COUNTRY_BUFFER,
   shape = POLY_SHAPE,
-  area = POLY_SIZE
+  area = POLY_SIZE,
+  crs = CRS
 )
 
-grid_buffer <- generate_buffers(grid, dist = POLY_BUFFER)
+grid_buffer <- generate_buffers(grid, dist = POLY_BUFFER, buffer_only = TRUE)
+
+# Generate REDD project polygons from centroids
+
+redd_radius <- redd_proj %>%
+  st_transform(CRS) %>%
+  mutate(radius = sqrt(area * 0.01 / pi))  # km
+
+redd_buffer <- generate_buffers(redd_radius, dist = redd_radius$radius)
+
+# Remove polygons and buffers with > 10% area intersecting REDD projects
+grid_redd <- grid %>%
+  st_intersection(st_union(redd_buffer)) %>%
+  mutate(area = st_area(x),
+         area_frac = as.numeric(area) / (POLY_SIZE * 10000)) %>%
+  filter(area_frac > 0.1)
+
+grid_non_redd <- filter(grid, !(ID %in% grid_redd$ID))
 
 ## Calculate forest cover and loss in polygon and buffer regions --------
 
 # Convert forest cover percentage to binary layer using 50% threshold
 fc_binary <- fc %>%
   aggregate(fact = AGG) %>%
-  is_greater_than(50) %>%
+  is_greater_than(30) %>%
   as.numeric()
 
 # fc_mask <- fc_binary %>%
@@ -74,7 +99,7 @@ fc_binary <- fc %>%
 # the dataset completeness)
 
 # Extract forest cover per polygon and filter to threshold
-grid_fc <- grid %>%
+grid_fc <- grid_non_redd %>%
   poly_extract(fc_binary) %>%
   filter(treecover2000 >= FC_THRESHOLD / 100)
 

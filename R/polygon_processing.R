@@ -13,11 +13,15 @@
 #' @param unit A string representing the areal unit, e.g., "hectares"
 #' 
 
-generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = "hectares") {
+generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = "hectares", crs = NULL) {
   # Set arg to TRUE if shape == "square", FALSE if shape == "hex", else NA
   square_arg = ifelse(
     tolower(shape) == "square", TRUE, ifelse(
       tolower(shape) == "hex", FALSE, NA))
+  
+  if (!is.null(crs)) {
+    geometry <- st_transform(geometry, crs)
+  }
   
   # Shrink polygon by buffer distance
   message("Calculating buffer")
@@ -61,16 +65,23 @@ generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = 
 #' @param dist numeric. The buffer distance
 #' 
 
-generate_buffers <- function(geometry, dist) {
+generate_buffers <- function(geometry, dist, crs = NULL, buffer_only = FALSE) {
+  
+  if(!is.null(crs)) {
+    geometry <- st_transform(geometry,)
+  }
+  
   geometry_buffered <- st_buffer(geometry, dist = set_units(dist, "km"))
   
-  buffer_only <- map2(geometry_buffered$x, geometry$x, st_difference) %>%
-    st_as_sfc() %>%
-    st_set_crs(crs(geometry)) %>%
-    st_as_sf() %>%
-    bind_cols(st_drop_geometry(geometry))
+  if (buffer_only == TRUE) {
+    geometry_buffered <- map2(geometry_buffered$x, geometry$x, st_difference) %>%
+      st_as_sfc() %>%
+      st_set_crs(crs(geometry)) %>%
+      st_as_sf() %>%
+      bind_cols(st_drop_geometry(geometry))
+  }
   
-  buffer_only
+  geometry_buffered
 }
 
 
