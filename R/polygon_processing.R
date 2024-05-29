@@ -65,14 +65,34 @@ generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = 
 #' @param dist numeric. The buffer distance
 #' 
 
-generate_buffers <- function(geometry, dist, crs = NULL, buffer_only = FALSE) {
+generate_buffers <- function(
+    geometry,
+    dist = NULL,
+    area_ratio = NULL,
+    shape = "hex",
+    crs = NULL,
+    buffer_only = FALSE) {
   
+  # Transform if needed
   if(!is.null(crs)) {
-    geometry <- st_transform(geometry,)
+      geometry <- st_transform(geometry,)
   }
   
-  geometry_buffered <- st_buffer(geometry, dist = set_units(dist, "km"))
+  # Calculate radius if area provided
+  if(is.null(dist)) {
+    radius <- ifelse(
+      shape == "hex",
+      sqrt(st_area(st_geometry(geometry)) / (2 * sqrt(3))),
+      sqrt(st_area_geometry / 2)
+    )
+    
+    dist <- radius * (sqrt(1 + area_ratio) - 1)
+  } else {
+    dist <- set_units(dist, "km")
+  }
   
+  geometry_buffered <- st_buffer(geometry, dist = dist, joinStyle = "MITRE")
+
   if (buffer_only == TRUE) {
     geometry_buffered <- map2(geometry_buffered$x, geometry$x, st_difference) %>%
       st_as_sfc() %>%
@@ -80,7 +100,7 @@ generate_buffers <- function(geometry, dist, crs = NULL, buffer_only = FALSE) {
       st_as_sf() %>%
       bind_cols(st_drop_geometry(geometry))
   }
-  
+
   geometry_buffered
 }
 

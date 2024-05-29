@@ -6,19 +6,26 @@ source("scripts/load.R")
 
 ## Set parameters --------
 
+# Spatial and temporal range
 COUNTRY <- "Colombia"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
+
+# Polygon sampling
 COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when generating polygons (km)
 POLY_SIZE <- 100000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
-POLY_BUFFER <- 10 # polygon buffer distance in km
+POLY_BUFFER_RATIO <- 1 # polygon buffer area as ratio of polygon area
 SAMPLE_N <- 100  # number of polygons to sample
+
+# Forest definitions
+TREE_THRESHOLD <- 30  # Minimum % canopy cover to classify as forest
 FC_THRESHOLD <- 20  # Minimum forest cover to include polygons in sample (%)
 FOREST_EDGE_AREA <- 100 # Minimum continuous nonforest area to define as forest edge, hectares
+
+# Data processing
 OUTPUT_PATH <- "data/processed/vector/sample_polygons"  # Output directory
 SEED <- 111  # Random number seed
-
 AGG <- 5 # Factor to aggregate rasters to speed calculation/test pipeline
 
 ## Load datasets --------
@@ -30,7 +37,7 @@ country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>% st_a
 # Raster data
 fc <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "treecover2000")
 fc_loss <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "lossyear")
-# plantations <- get_tiled_raster(folder = "data/raw/raster/plantations", layer = 1)
+plantations <- get_tiled_raster(folder = "data/raw/raster/plantations", layer = 1)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
 cropland <- get_tiled_raster("data/raw/raster/cropland")
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
@@ -65,7 +72,9 @@ grid <- generate_polygons(
   crs = CRS
 )
 
-grid_buffer <- generate_buffers(grid, dist = POLY_BUFFER, buffer_only = TRUE)
+# Generate hexagonal buffers of POLY_BUFFER_RATIO * POLY_SIZE area
+
+grid_buffer <- generate_buffers(grid, area_ratio = POLY_BUFFER_RATIO, buffer_only = FALSE)
 
 # Generate REDD project polygons from centroids
 
@@ -75,7 +84,7 @@ redd_radius <- redd_proj %>%
 
 redd_buffer <- generate_buffers(redd_radius, dist = redd_radius$radius)
 
-# Remove polygons and buffers with > 10% area intersecting REDD projects
+# Remove polygons and buffers intersecting REDD projects
 grid_redd <- grid %>%
   st_intersection(st_union(redd_buffer)) %>%
   mutate(area = st_area(x),
