@@ -4,7 +4,7 @@ library(rsi)
 library(geodata)
 
 # data reading and management
-library(magrittr)
+library(readr)
 library(dplyr)
 library(tidyr)
 library(purrr)

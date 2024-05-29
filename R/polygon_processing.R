@@ -71,11 +71,12 @@ generate_buffers <- function(
     area_ratio = NULL,
     shape = "hex",
     crs = NULL,
-    buffer_only = FALSE) {
+    buffer_only = FALSE,
+    ...) {
   
   # Transform if needed
   if(!is.null(crs)) {
-      geometry <- st_transform(geometry,)
+      geometry <- st_transform(geometry)
   }
   
   # Calculate radius if area provided
@@ -91,10 +92,10 @@ generate_buffers <- function(
     dist <- set_units(dist, "km")
   }
   
-  geometry_buffered <- st_buffer(geometry, dist = dist, joinStyle = "MITRE")
+  geometry_buffered <- st_buffer(geometry, dist = dist, ...)
 
   if (buffer_only == TRUE) {
-    geometry_buffered <- map2(geometry_buffered$x, geometry$x, st_difference) %>%
+    geometry_buffered <- map2(st_geometry(geometry_buffered), st_geometry(geometry), st_difference) %>%
       st_as_sfc() %>%
       st_set_crs(crs(geometry)) %>%
       st_as_sf() %>%

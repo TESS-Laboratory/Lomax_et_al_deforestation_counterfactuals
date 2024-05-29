@@ -37,9 +37,9 @@ country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>% st_a
 # Raster data
 fc <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "treecover2000")
 fc_loss <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "lossyear")
-plantations <- get_tiled_raster(folder = "data/raw/raster/plantations", layer = 1)
+plantations <- get_tiled_raster(folder = "data/raw/raster/plantations", layer = 1, crop = country)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
-cropland <- get_tiled_raster("data/raw/raster/cropland")
+cropland <- get_tiled_raster("data/raw/raster/cropland", crop = country)
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
 ppt <- get_raster("data/raw/raster/chirps", COUNTRY)
 tMean <- get_raster("data/raw/raster/era5", COUNTRY)
@@ -74,35 +74,35 @@ grid <- generate_polygons(
 
 # Generate hexagonal buffers of POLY_BUFFER_RATIO * POLY_SIZE area
 
-grid_buffer <- generate_buffers(grid, area_ratio = POLY_BUFFER_RATIO, buffer_only = FALSE)
+grid_buffer <- generate_buffers(
+  grid,
+  area_ratio = POLY_BUFFER_RATIO,
+  buffer_only = FALSE,
+  joinStyle = "MITRE")
 
 # Generate REDD project polygons from centroids
 
 redd_radius <- redd_proj %>%
   st_transform(CRS) %>%
-  mutate(radius = sqrt(area * 0.01 / pi))  # km
+  mutate(area = set_units(area * 0.01, "km^2"),
+         radius = sqrt(area / pi))  # km
 
 redd_buffer <- generate_buffers(redd_radius, dist = redd_radius$radius)
 
 # Remove polygons and buffers intersecting REDD projects
-grid_redd <- grid %>%
-  st_intersection(st_union(redd_buffer)) %>%
-  mutate(area = st_area(x),
-         area_frac = as.numeric(area) / (POLY_SIZE * 10000)) %>%
-  filter(area_frac > 0.1)
-
-grid_non_redd <- filter(grid, !(ID %in% grid_redd$ID))
+grid_nonredd <- grid %>%
+  st_filter(st_union(redd_buffer), .predicate = st_disjoint)
 
 ## Calculate forest cover and loss in polygon and buffer regions --------
 
-# Convert forest cover percentage to binary layer using 50% threshold
+# Convert forest cover percentage to binary layer using TREE_THRESHOLD
 fc_binary <- fc %>%
-  aggregate(fact = AGG) %>%
-  is_greater_than(30) %>%
+  # aggregate(fact = AGG) %>%
+  is_greater_than(TREE_THRESHOLD) %>%
   as.numeric()
 
-# fc_mask <- fc_binary %>%
-#   mask(plantations == 0, maskvalues = c(0, NA))
+fc_mask <- fc_binary %>%
+  mask(plantations == 0, maskvalues = c(0, NA))
 
 # NB: Currently removing all plantations (and with some reservations about
 # the dataset completeness)
