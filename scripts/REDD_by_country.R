@@ -12,7 +12,7 @@ redd_proj$area<- as.numeric(redd_proj$area)
 ##### filter for relevant projects #####
 filt_redd_proj <- redd_proj %>%
   filter(!(project_type %in% c("jurisdictional"))) %>%
-           filter((project_type %in% c("REDD")) & (Status_2022 %in% c("Ended", "Ongoing")))
+           filter(grepl("REDD", project_type) & (Status_2022 %in% c("Ended", "Ongoing")))
 
 
 ##### summarise #######
@@ -20,8 +20,7 @@ filt_redd_proj <- redd_proj %>%
 summary_REDD <- filt_redd_proj %>%
   group_by(country.name) %>%
   summarize(
-    total_area_ha = sum(area),
-    #sum_B = sum(B),
+    total_area_ha = sum(area, na.rm = TRUE),
     number_of_projects = n()
   )
 
