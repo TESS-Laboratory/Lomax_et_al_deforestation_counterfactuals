@@ -38,14 +38,13 @@ get_country <- function(country_name, crs = NULL, path = NULL) {
 ## TOO SLOW FOR VERY LARGE FILES - NEED TO FIND A WAY TO FILTER THEM BEFORE
 ## READING IN! MAYBE A LOOKUP TABLE?
 
-get_vector <- function(folder, country_name = NULL, country_poly = NULL) {
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  dir_files <- Sys.glob(paste0(dir_path, "/*.shp"))
+get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix = ".shp") {
+  file_paths <- Sys.glob(paste0(folder, "/*.shp"))
   
   if (!is.null(country_name)) {
-    files <- dir_files[grepl(country_name, dir_files)]
+    files <- file_paths[grepl(country_name, file_paths)]
   } else {
-    files <- dir_files
+    files <- file_paths
   }
   
   sf_list <- map(files, st_read)
@@ -80,12 +79,10 @@ get_vector <- function(folder, country_name = NULL, country_poly = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(country_name, folder, layer = NULL) {
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  dir_files <- list.files(dir_path)
-  country_file <- dir_files[grepl(country_name, dir_files)][1]
+get_raster <- function(folder, country = NULL, layer = NULL) {
+  file_path <- Sys.glob(paste0(folder, "/*", country, "*.tif*"))[1]
   
-  raster <- rast(paste0(dir_path, "/", country_file))
+  raster <- rast(file_path)
   
   if (!is.null(layer)) {
     raster <- raster[[layer]]
@@ -107,11 +104,10 @@ get_raster <- function(country_name, folder, layer = NULL) {
 
 get_tiled_raster <- function(folder, layer = NULL, names = NULL, crop = NULL) {
   # Find raster tiles
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  tif_files <- Sys.glob(paste0(dir_path, "/*.tif"))
+  file_paths <- Sys.glob(paste0(folder, "/*.tif"))
   
   # Create virtual raster
-  vrt <- vrt(tif_files)
+  vrt <- vrt(file_paths)
   
   # Subset and/or rename layers
   if(!is.null(layer)) {

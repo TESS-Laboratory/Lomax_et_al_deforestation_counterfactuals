@@ -30,14 +30,16 @@ AGG <- 5 # Factor to aggregate rasters to speed calculation/test pipeline
 
 ## Load datasets --------
 
-# Country admin boundaries
+# Country admin boundaries and jurisdictional data
 country <- gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>% st_as_sf()
 country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>% st_as_sf()
+econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
+  filter(country == COUNTRY)
 
 # Raster data
 fc <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "treecover2000")
 fc_loss <- get_raster("data/raw/raster/gfc", COUNTRY, layer = "lossyear")
-plantations <- get_tiled_raster(folder = "data/raw/raster/plantations", layer = 1, crop = country)
+plantations <- get_tiled_raster("data/raw/raster/plantations", layer = 1, crop = country)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
 cropland <- get_tiled_raster("data/raw/raster/cropland", crop = country)
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
@@ -47,12 +49,15 @@ travel_time_city <- get_raster("data/raw/raster/travel_time", "travel_time_to_ci
 travel_time_port <- get_raster("data/raw/raster/travel_time", "travel_time_to_ports_5")
 population <- get_raster("data/raw/raster/population")
 
-# Vector data
+# Vector and csv data
 
-rivers <- get_vector("Lin2021_rivers", country_poly = country) %>%
+rivers <- get_vector("data/raw/vector/Lin2021_rivers", country_poly = country) %>%
   filter(strmOrder >= 4) %>%
   st_filter(country)
-roads <- get_vector("GRIP_roads", country_poly = country)
+roads <- get_vector("data/raw/vector/GRIP_roads", country_poly = country)
+# roads_osm <- opq(bbox = COUNTRY) %>%
+#   add_osm_feature(key = "highway") %>%
+#   osmdata_sf()
 protected_areas <- get_vector("protected_areas", country_name = COUNTRY, suffix = ".geojson")
 redd_proj <- read_csv("data/REDD_database_no_meta.csv") %>%
   filter(!is.na(Longitude)) %>%
@@ -101,14 +106,15 @@ fc_binary <- fc %>%
   is_greater_than(TREE_THRESHOLD) %>%
   as.numeric()
 
-fc_mask <- fc_binary %>%
-  mask(plantations == 0, maskvalues = c(0, NA))
+plantation_mask <- project(plantations, fc_binary) == 0
+
+fc_mask <- mask(fc_binary, plantation_mask, maskvalues = c(0, NA))
 
 # NB: Currently removing all plantations (and with some reservations about
 # the dataset completeness)
 
 # Extract forest cover per polygon and filter to threshold
-grid_fc <- grid_non_redd %>%
+grid_fc <- grid_nonredd %>%
   poly_extract(fc_binary) %>%
   filter(treecover2000 >= FC_THRESHOLD / 100)
 
