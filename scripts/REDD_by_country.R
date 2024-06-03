@@ -33,3 +33,4 @@ summary_REDD$un.country.code<- countrycode(summary_REDD$country.name, origin = "
 summary_REDD$region<- countrycode(summary_REDD$un.country.code, origin = "un", destination = "region")
 
 #### simplify tables for document ####
+write.csv(summary_REDD, "data/REDD_proj_by_country.csv", row.names = FALSE)
