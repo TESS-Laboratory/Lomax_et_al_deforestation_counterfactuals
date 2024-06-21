@@ -11,3 +11,4 @@ results/
 # Except these files
 
 !data/REDD_database.xlsx
+!data/REDD_database_no_meta.csv
