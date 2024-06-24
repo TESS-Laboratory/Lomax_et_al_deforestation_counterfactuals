@@ -165,3 +165,47 @@ get_stac_raster <- function(country, collection, asset, folder = NULL, crs = NUL
   rast(filepath)
 }
 
+#' @title Read Renoster polygons
+#' @description
+#' A function to read in, clean and fix geometries of REDD project boundaries
+#' held in .gpkg format in the Renoster dataset (Karnik et al., pp)
+#' 
+#' @usage read_renoster(path, skip = NULL)
+#' 
+#' @param path string. A filepath to the data file.
+#' @param skip (optional) string. A vector of project codes to skip (e.g., if they contain
+#' unfixable geometries). Codes should be in the format "XXX123", e.g., "VCS381".
+
+read_renoster <- function(filepath, skip = NULL) {
+  st_read(filepath) %>%
+    select(ProjectID, geom) %>%
+    filter(st_is(geom, "MULTIPOLYGON")) %>%
+    filter(!(ProjectID %in% skip)) %>%
+    st_make_valid() %>%
+    st_collection_extract()
+}
+
+#' @title Read KML files
+#' @description
+#' A function to read in, clean and fix geometries of project boundaries stored
+#' in .kml formats (e.g., the Verra dataset). Files with no layers or other
+#' errors will be silently skipped. Files with multiple layers will have all
+#' layers read in and combined into a single sf object.
+#' 
+#' @usage read_kml(path)
+#' 
+#' @param path string. A filepath to the data file.
+
+read_kml <- function(filepath) {
+  
+  layer_names <- possibly(st_layers)(filepath)$name
+  
+  st_read2 <- possibly(st_read)
+  
+  if(!is.null(layer_names)) {
+    layers <- map(layer_names, function(name) st_read2(filepath, layer = name, quiet = TRUE))
+    layers <- bind_rows(layers)
+    
+    layers
+  }
+}
