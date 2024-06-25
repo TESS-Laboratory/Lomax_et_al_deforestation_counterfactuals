@@ -38,14 +38,13 @@ get_country <- function(country_name, crs = NULL, path = NULL) {
 ## TOO SLOW FOR VERY LARGE FILES - NEED TO FIND A WAY TO FILTER THEM BEFORE
 ## READING IN! MAYBE A LOOKUP TABLE?
 
-get_vector <- function(folder, country_name = NULL, country_poly = NULL) {
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  dir_files <- Sys.glob(paste0(dir_path, "/*.shp"))
+get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix = ".shp") {
+  file_paths <- Sys.glob(paste0(folder, "/*.shp"))
   
   if (!is.null(country_name)) {
-    files <- dir_files[grepl(country_name, dir_files)]
+    files <- file_paths[grepl(country_name, file_paths)]
   } else {
-    files <- dir_files
+    files <- file_paths
   }
   
   sf_list <- map(files, st_read)
@@ -80,12 +79,10 @@ get_vector <- function(folder, country_name = NULL, country_poly = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(country_name, folder, layer = NULL) {
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  dir_files <- list.files(dir_path)
-  country_file <- dir_files[grepl(country_name, dir_files)][1]
+get_raster <- function(folder, country = NULL, layer = NULL) {
+  file_path <- Sys.glob(paste0(folder, "/*", country, "*.tif*"))[1]
   
-  raster <- rast(paste0(dir_path, "/", country_file))
+  raster <- rast(file_path)
   
   if (!is.null(layer)) {
     raster <- raster[[layer]]
@@ -105,13 +102,12 @@ get_raster <- function(country_name, folder, layer = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target rasters.
 
-get_tiled_raster <- function(folder, layer = NULL, names = NULL) {
+get_tiled_raster <- function(folder, layer = NULL, names = NULL, crop = NULL) {
   # Find raster tiles
-  dir_path <- common::dir.find("data", folder, up = 0, down = 5)
-  tif_files <- Sys.glob(paste0(dir_path, "/*.tif"))
+  file_paths <- Sys.glob(paste0(folder, "/*.tif"))
   
   # Create virtual raster
-  vrt <- vrt(tif_files)
+  vrt <- vrt(file_paths)
   
   # Subset and/or rename layers
   if(!is.null(layer)) {
@@ -120,6 +116,10 @@ get_tiled_raster <- function(folder, layer = NULL, names = NULL) {
   
   if (!is.null(names)) {
     names(vrt) <- names
+  }
+  
+  if (!is.null(crop)) {
+    vrt <- crop(vrt, country)
   }
   
   # Return virtual raster dataset
@@ -165,3 +165,47 @@ get_stac_raster <- function(country, collection, asset, folder = NULL, crs = NUL
   rast(filepath)
 }
 
+#' @title Read Renoster polygons
+#' @description
+#' A function to read in, clean and fix geometries of REDD project boundaries
+#' held in .gpkg format in the Renoster dataset (Karnik et al., pp)
+#' 
+#' @usage read_renoster(path, skip = NULL)
+#' 
+#' @param path string. A filepath to the data file.
+#' @param skip (optional) string. A vector of project codes to skip (e.g., if they contain
+#' unfixable geometries). Codes should be in the format "XXX123", e.g., "VCS381".
+
+read_renoster <- function(filepath, skip = NULL) {
+  st_read(filepath) %>%
+    select(ProjectID, geom) %>%
+    filter(st_is(geom, "MULTIPOLYGON")) %>%
+    filter(!(ProjectID %in% skip)) %>%
+    st_make_valid() %>%
+    st_collection_extract()
+}
+
+#' @title Read KML files
+#' @description
+#' A function to read in, clean and fix geometries of project boundaries stored
+#' in .kml formats (e.g., the Verra dataset). Files with no layers or other
+#' errors will be silently skipped. Files with multiple layers will have all
+#' layers read in and combined into a single sf object.
+#' 
+#' @usage read_kml(path)
+#' 
+#' @param path string. A filepath to the data file.
+
+read_kml <- function(filepath) {
+  
+  layer_names <- possibly(st_layers)(filepath)$name
+  
+  st_read2 <- possibly(st_read)
+  
+  if(!is.null(layer_names)) {
+    layers <- map(layer_names, function(name) st_read2(filepath, layer = name, quiet = TRUE))
+    layers <- bind_rows(layers)
+    
+    layers
+  }
+}

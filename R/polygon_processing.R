@@ -13,11 +13,15 @@
 #' @param unit A string representing the areal unit, e.g., "hectares"
 #' 
 
-generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = "hectares") {
+generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = "hectares", crs = NULL) {
   # Set arg to TRUE if shape == "square", FALSE if shape == "hex", else NA
   square_arg = ifelse(
     tolower(shape) == "square", TRUE, ifelse(
       tolower(shape) == "hex", FALSE, NA))
+  
+  if (!is.null(crs)) {
+    geometry <- st_transform(geometry, crs)
+  }
   
   # Shrink polygon by buffer distance
   message("Calculating buffer")
@@ -61,16 +65,44 @@ generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = 
 #' @param dist numeric. The buffer distance
 #' 
 
-generate_buffers <- function(geometry, dist) {
-  geometry_buffered <- st_buffer(geometry, dist = set_units(dist, "km"))
+generate_buffers <- function(
+    geometry,
+    dist = NULL,
+    area_ratio = NULL,
+    shape = "hex",
+    crs = NULL,
+    buffer_only = FALSE,
+    ...) {
   
-  buffer_only <- map2(geometry_buffered$x, geometry$x, st_difference) %>%
-    st_as_sfc() %>%
-    st_set_crs(crs(geometry)) %>%
-    st_as_sf() %>%
-    bind_cols(st_drop_geometry(geometry))
+  # Transform if needed
+  if(!is.null(crs)) {
+      geometry <- st_transform(geometry)
+  }
   
-  buffer_only
+  # Calculate radius if area provided
+  if(is.null(dist)) {
+    radius <- ifelse(
+      shape == "hex",
+      sqrt(st_area(st_geometry(geometry)) / (2 * sqrt(3))),
+      sqrt(st_area_geometry / 2)
+    )
+    
+    dist <- radius * (sqrt(1 + area_ratio) - 1)
+  } else {
+    dist <- set_units(dist, "km")
+  }
+  
+  geometry_buffered <- st_buffer(geometry, dist = dist, ...)
+
+  if (buffer_only == TRUE) {
+    geometry_buffered <- map2(st_geometry(geometry_buffered), st_geometry(geometry), st_difference) %>%
+      st_as_sfc() %>%
+      st_set_crs(crs(geometry)) %>%
+      st_as_sf() %>%
+      bind_cols(st_drop_geometry(geometry))
+  }
+
+  geometry_buffered
 }
 
 
@@ -101,12 +133,10 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
         force_df = TRUE,
         full_colnames = TRUE,
         coverage_area = TRUE,
-        append_cols = id_col
+        append_cols = id_col,
+        max_cells_in_memory = 3e+08
       ) %>%
       rename_with(.cols = starts_with(fun), ~ gsub(paste0(fun, "."), "", .x))
-    
-    output <- grid %>%
-      full_join(extract)
     
   } else if (is_function(fun)) {
     
@@ -121,17 +151,18 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
        force_df = TRUE,
        coverage_area = TRUE,
        summarize_df = TRUE,
-       append_cols = "ID"
+       append_cols = "ID",
+       max_cells_in_memory = 3e+08
      )
-   
-   output <- grid %>%
-     full_join(extract)
    
   } else {
     
     stop("'fun' is not a valid function")
     
   }
+  
+  output <- grid %>%
+    full_join(extract)
   
   output
 }
@@ -176,6 +207,10 @@ sum_by_value <- function(df, wide = FALSE) {
   }
 }
 
+#' @title Clean NAs
+#' @description Repairs NA values left from incomplete matching after joining
+#' two data frames.
+
 #' @title Calculate cumulative deforestation
 #' @description
 #' Calculates cumulative deforestation in a set of polygons from
@@ -198,12 +233,12 @@ calc_cumulative_defor <- function(x, start, area_col, after = FALSE) {
     frac_defor <- x %>%
       group_by(ID) %>%
       filter(cell_value != 0) %>%
-      summarise(cum_defor = sum(.data[[area_col]] * (cell_value <= start_val)))
+      summarise(cum_defor = sum(.data[[area_col]] * (cell_value <= start_val), na.rm = T))
     
   } else {
     frac_defor <- x %>%
       group_by(ID) %>%
-      summarise(cum_defor = sum(.data[[area_col]] * (cell_value > start_val)))
+      summarise(cum_defor = sum(.data[[area_col]] * (cell_value > start_val), na.rm = T))
   }
   
   if (any(class(x) == "sf")) {
@@ -225,21 +260,21 @@ calc_cumulative_defor <- function(x, start, area_col, after = FALSE) {
 #' @param strata character. The column on which to stratify
 #' 
 
-sample_polygons <- function(x, n, strata = NULL) {
+sample_polygons <- function(x, n, strata_col = NULL, strata = 5) {
   if (n >= nrow(x)) {
     warning("Requested n exceeds number of polygons in x")
   }
   
-  if (is.null(strata)) {
+  if (is.null(strata_col)) {
+    
     slice_sample(x, n = n)
+    
   } else {
+    
     x %>%
-    mutate(quantile = cut_number(.data[[strata]], n = 5, labels = FALSE)) %>%
-      slice_sample(n = SAMPLE_N / 5, by = quantile) %>%
-      left_join(x) %>%
-      st_as_sf()
+    mutate(quantile = cut_number(.data[[strata_col]], n = strata, labels = FALSE)) %>%
+      slice_sample(n = SAMPLE_N / strata, by = quantile)
+    
   }
   
 }
-
-# Is bypassing disallowed?

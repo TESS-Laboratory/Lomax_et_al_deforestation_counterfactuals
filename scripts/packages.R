@@ -1,11 +1,14 @@
 # data download
 library(rstac)
 library(rsi)
+library(geodata)
+library(osmdata)
 
 # data reading and management
-library(magrittr)
+library(readr)
 library(dplyr)
 library(tidyr)
+library(magrittr)
 library(purrr)
 library(sf)
 library(terra)
