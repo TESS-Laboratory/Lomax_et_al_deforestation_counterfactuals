@@ -106,17 +106,20 @@ generate_buffers <- function(
 }
 
 
-#' @title Extract forest cover
+#' @title Polygon extract
 #' @description
-#' Extracts forest cover % for each member of a grid from an underlying raster.
-#' The raster can contain a percentage or fractional forest cover value,
-#' a binary forest/nonforest or a categorical set of values representing forest.
+#' Extracts values from cells in a SpatRaster that are covered by defined
+#' polygons using an inbuilt or user-defined summary function. A wrapper around
+#' exact_extract from the exactextractr package.
 #' 
-#' @usage extract_grid(grid, layer)
+#' @usage poly_extract(polys, layer)
 #' 
-#' @param grid An sf object containing a grid or other polygons
+#' @param polys An sf object containing a grid or other polygons
 #'   for which to extract values
 #' @param layer A SpatRaster containing values
+#' @param fun A user-defined function or a string representing an inbuilt function
+#' @param id_col character. The name of the polygon ID column in the poly object
+#' @param ... additional arguments to pass to exactextractr::exact_extract()
 #' 
 
 poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
@@ -130,6 +133,7 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
         layer, 
         grid, 
         fun = fun, 
+        ...,
         force_df = TRUE,
         full_colnames = TRUE,
         coverage_area = TRUE,

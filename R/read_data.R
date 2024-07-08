@@ -1,3 +1,5 @@
+## Functions for efficiently reading in data to the workflow
+
 #' @title Get country
 #' @description
 #' A helper function to extract country boundary polygons from a global dataset
@@ -102,9 +104,11 @@ get_raster <- function(folder, country = NULL, layer = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target rasters.
 
-get_tiled_raster <- function(folder, layer = NULL, names = NULL, crop = NULL) {
+get_tiled_raster <- function(folder, match = "", layer = NULL, names = NULL, crop = NULL) {
+  
   # Find raster tiles
   file_paths <- Sys.glob(paste0(folder, "/*.tif"))
+  file_paths <- file_paths[grepl(match, file_paths)]
   
   # Create virtual raster
   vrt <- vrt(file_paths)
@@ -176,13 +180,10 @@ get_stac_raster <- function(country, collection, asset, folder = NULL, crs = NUL
 #' @param skip (optional) string. A vector of project codes to skip (e.g., if they contain
 #' unfixable geometries). Codes should be in the format "XXX123", e.g., "VCS381".
 
-read_renoster <- function(filepath, skip = NULL) {
+read_renoster <- function(filepath, id_list) {
   st_read(filepath) %>%
     select(ProjectID, geom) %>%
-    filter(st_is(geom, "MULTIPOLYGON")) %>%
-    filter(!(ProjectID %in% skip)) %>%
-    st_make_valid() %>%
-    st_collection_extract()
+    filter(ProjectID %in% id_list)
 }
 
 #' @title Read KML files
