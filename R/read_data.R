@@ -81,8 +81,8 @@ get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix 
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(folder, country = NULL, layer = NULL) {
-  file_path <- Sys.glob(paste0(folder, "/*", country, "*.tif*"))[1]
+get_raster <- function(folder, match = NULL, layer = NULL) {
+  file_path <- Sys.glob(paste0(folder, "/*", match, "*.tif*"))[1]
   
   raster <- rast(file_path)
   

@@ -13,7 +13,7 @@ START_YEAR <- 2016  # Simulated start year of protection project
 
 # Polygon sampling
 COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when generating polygons (km)
-POLY_SIZE <- 100000 # size of polygons in hectares
+POLY_SIZE <- 59000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
 POLY_BUFFER_RATIO <- 1 # polygon buffer area as ratio of polygon area
 SAMPLE_N <- 100  # number of polygons to sample
@@ -37,29 +37,35 @@ econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
   filter(country == COUNTRY)
 
 # Raster data
-fc <- get_tiled_raster("data/raw/raster/tmf", match = COUNTRY)
-# plantations <- get_tiled_raster("data/raw/raster/plantations", layer = 1, crop = country)
+fc <- get_raster("data/processed/raster/", match = COUNTRY)
+plantations <- get_tiled_raster("data/raw/raster/plantations", layer = 1, crop = country)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
-# cropland <- get_tiled_raster("data/raw/raster/cropland", crop = country)
+cropland <- get_tiled_raster("data/raw/raster/cropland", crop = country)
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
 ppt <- get_raster("data/raw/raster/chirps", COUNTRY)
 tMean <- get_raster("data/raw/raster/era5", COUNTRY)
+ag_suitability <- rast("data/raw/raster/agricultural_suitability/1980-2009_hist_i/overall_suitability.bil")
 travel_time_city <- get_raster("data/raw/raster/travel_time", "travel_time_to_cities_12")
 travel_time_port <- get_raster("data/raw/raster/travel_time", "travel_time_to_ports_5")
-population <- get_raster("data/raw/raster/population")
+population <- Sys.glob("data/raw/raster/population/*.tif") %>%
+    rast() %>%
+    c()
 
 # Vector and csv data
-
+ecoregions <- st_read("data/raw/vector/ecoregions2017/Ecoregions2017.shp")
 rivers <- get_vector("data/raw/vector/Lin2021_rivers", country_poly = country) %>%
   filter(strmOrder >= 5) %>%
-  st_filter(country)
-roads_grip <- get_vector("data/raw/vector/GRIP_roads", country_poly = country)
+  st_filter(country) %>%
+  st_transform(CRS)
+roads_grip <- get_vector("data/raw/vector/GRIP_roads", country_poly = country) %>%
+  st_transform(CRS)
 # roads_osm <- opq(bbox = COUNTRY) %>%
 #   add_osm_feature(key = "highway") %>%
 #   osmdata_sf()
 protected_areas <- get_vector("protected_areas", country_name = COUNTRY, suffix = ".geojson")
 redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
-  filter(Country == COUNTRY)
+  filter(Country == COUNTRY) %>%
+  st_transform(CRS)
 
 ## Generate polygon grids --------
 
@@ -79,20 +85,19 @@ grid_buffer <- generate_buffers(
   buffer_only = FALSE,
   joinStyle = "MITRE")
 
-# Generate REDD project polygons from centroids
+## Filter to polygons meeting selection criteria --------
 
-redd_radius <- redd_proj %>%
-  st_transform(CRS) %>%
-  mutate(area = set_units(area * 0.01, "km^2"),
-         radius = sqrt(area / pi))  # km
-
-redd_buffer <- generate_buffers(redd_radius, dist = redd_radius$radius)
-
-# Remove polygons and buffers intersecting REDD projects
+# Remove polygons intersecting REDD projects
 grid_nonredd <- grid %>%
-  st_filter(st_union(redd_buffer), .predicate = st_disjoint)
+  st_filter(st_union(redd_projects), .predicate = st_disjoint)
 
-## Calculate forest cover and loss in polygon and buffer regions --------
+grid_buffer_nonredd <- filter(grid_buffer, ID %in% grid_nonredd$ID)
+
+# Remove polygons with < 20% forest cover in 1990
+
+fc1990 <- subset(fc, "Dec1990") %in% c(1, 2, 4)  # Undisturbed, degraded or regrowth forest
+
+
 
 # Convert forest cover percentage to binary layer using TREE_THRESHOLD
 fc_binary <- fc %>%
