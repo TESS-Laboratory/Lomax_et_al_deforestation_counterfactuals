@@ -70,21 +70,21 @@ get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix 
     
 }
 
-#' @title Get prepared raster layer labeled by country 
+#' @title Get prepared raster layer defined by a given match string
 #' @description 
 #' A function to load a complete raster with a country name from a filepath
 #' 
-#' @usage get_raster(country_name, folder, crs, path, agg, layer, type)
+#' @usage get_raster(folder, match, layer)
 #' 
 #' @param country_name character. The name of the target country
 #' @param folder character. The name of the dataset folder
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(folder, country = NULL, layer = NULL) {
-  file_path <- Sys.glob(paste0(folder, "/*", country, "*.tif*"))[1]
+get_raster <- function(folder, match = NULL, layer = NULL) {
+  file_paths <- Sys.glob(paste0(folder, "/*", match, "*.tif*"))
   
-  raster <- rast(file_path)
+  raster <- rast(file_paths)
   
   if (!is.null(layer)) {
     raster <- raster[[layer]]
@@ -105,6 +105,42 @@ get_raster <- function(folder, country = NULL, layer = NULL) {
 #' extract from the target rasters.
 
 get_tiled_raster <- function(folder, match = "", layer = NULL, names = NULL, crop = NULL) {
+  
+  # Find raster tiles
+  file_paths <- Sys.glob(paste0(folder, "/*.tif"))
+  file_paths <- file_paths[grepl(match, file_paths)]
+  
+  # Create virtual raster
+  vrt <- vrt(file_paths)
+  
+  # Subset and/or rename layers
+  if(!is.null(layer)) {
+    vrt <- vrt[[layer]]
+  }
+  
+  if (!is.null(names)) {
+    names(vrt) <- names
+  }
+  
+  if (!is.null(crop)) {
+    vrt <- crop(vrt, country)
+  }
+  
+  # Return virtual raster dataset
+  vrt
+}
+
+#' @title Get multilayer raster
+#' @description 
+#' A function to load and combine 
+#' 
+#' @usage get_tiled_raster(folder, layer = NULL)
+#' 
+#' @param folder character. The name of the dataset folder.
+#' @param layer character or numeric. A vector of names or layer numbers to
+#' extract from the target rasters.
+
+get_multilayer_raster <- function(folder, match = "", layer = NULL, names = NULL, crop = NULL) {
   
   # Find raster tiles
   file_paths <- Sys.glob(paste0(folder, "/*.tif"))
