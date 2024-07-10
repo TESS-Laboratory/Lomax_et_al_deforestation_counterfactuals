@@ -82,6 +82,7 @@ get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix 
 #' extract from the target raster
 
 get_raster <- function(folder, match = NULL, layer = NULL) {
+  
   file_paths <- Sys.glob(paste0(folder, "/*", match, "*.tif*"))
   
   raster <- rast(file_paths)
