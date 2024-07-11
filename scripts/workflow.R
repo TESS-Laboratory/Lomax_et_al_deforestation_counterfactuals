@@ -37,8 +37,7 @@ econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
   filter(country == COUNTRY)
 
 # Raster data
-fc <- get_raster("data/processed/raster/", match = COUNTRY)
-plantations <- get_tiled_raster("data/raw/raster/plantations", layer = 1, crop = country)
+fc <- get_raster("data/processed/raster/tmf", match = COUNTRY)
 biomass <- get_stac_raster(COUNTRY, collection = "hgb", asset = "aboveground", crs = CRS)
 cropland <- get_tiled_raster("data/raw/raster/cropland", crop = country)
 dem <- get_stac_raster(COUNTRY, collection = "cop-dem-glo-90", asset = "data", folder = "dem", crs = CRS)
@@ -57,10 +56,8 @@ rivers <- get_vector("data/raw/vector/Lin2021_rivers", country_poly = country) %
   st_transform(CRS)
 roads_grip <- get_vector("data/raw/vector/GRIP_roads", country_poly = country) %>%
   st_transform(CRS)
-# roads_osm <- opq(bbox = COUNTRY) %>%
-#   add_osm_feature(key = "highway") %>%
-#   osmdata_sf()
-protected_areas <- get_vector("protected_areas", country_name = COUNTRY, suffix = ".geojson")
+roads_osm <- get_osm("data/raw/vector/osm", match = "col", suffix = "shp")
+protected_areas <- get_vector("data/raw/vector/protected_areas", match = COUNTRY, suffix = ".geojson")
 redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
   filter(Country == COUNTRY) %>%
   st_transform(CRS)
