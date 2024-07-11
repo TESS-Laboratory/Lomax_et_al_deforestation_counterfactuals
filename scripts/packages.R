@@ -2,12 +2,12 @@
 library(rstac)
 library(rsi)
 library(geodata)
-library(osmdata)
 
 # data reading and management
 library(readr)
 library(dplyr)
 library(tidyr)
+library(stringr)
 library(magrittr)
 library(purrr)
 library(sf)
@@ -18,9 +18,9 @@ library(units)
 library(exactextractr)
 library(landscapemetrics)
 
-# data visualisation
-library(tmap)
-library(ggplot2)
-
-# time tracking
-library(tictoc)
+# # data visualisation
+# library(tmap)
+# library(ggplot2)
+# 
+# # time tracking
+# library(tictoc)

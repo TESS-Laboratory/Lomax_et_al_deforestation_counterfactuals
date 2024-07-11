@@ -13,11 +13,13 @@
 #' @param ext character. The target file extension
 #' 
 
-get_vector <- function(folder, match = NULL, poly = NULL, ext = ".shp") {
+get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = ".shp") {
   file_paths <- Sys.glob(paste0(folder, "/*", ext))
   
   if (!is.null(match)) {
-    files <- file_paths[grepl(match, file_paths)]
+    match <- data_lookup[data_lookup$country == match,][[col]]
+    
+    files <- file_paths[str_detect(file_paths, match)]
   } else {
     files <- file_paths
   }
@@ -53,7 +55,9 @@ get_vector <- function(folder, match = NULL, poly = NULL, ext = ".shp") {
 #' @param match character. A string (e.g., country name) to match in the target file(s)
 #' @param layer character. The key to filter resulting data on
 
-get_osm <- function(folder, match = NULL, type = "highway") {
+get_osm <- function(folder, match, source = "osm", type = "highway") {
+  
+  match <- data_lookup[data_lookup$country == match,][[col]]
   
   file_path <- Sys.glob(paste0(folder, "/*", match, "*.pbf"))
   
@@ -132,24 +136,25 @@ get_tiled_raster <- function(folder, match = "", layer = NULL, names = NULL, cro
 #' 
 #' @usage get_stac_raster(country, collection, asset, folder)
 #' 
-#' @param country character. Country name.
 #' @param collection character. A STAC collection ID.
 #' @param asset character. The asset or band name(s) to retrieve.
+#' @param aoi sf object. Polygon(s) representing AOI.
+#' @param filename character. Filename to save to disk.
 #' @param folder character. Then name of the output folder in "data/raw/raster/"
 #' 
 
-get_stac_raster <- function(poly, collection, asset, folder = NULL, crs = NULL) {
+get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY, folder = NULL) {
   
   if(is.null(folder)) {
     folder <- collection
   }
   
-  filepath <- paste0("data/raw/raster/", folder, "/", country, ".tif")
+  filepath <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
 
   if (!file.exists(filepath)) {
     message("File not detected. Downloading from STAC.")
     filepath <- rsi::get_stac_data(
-      aoi = poly,
+      aoi = aoi,
       start_date = "2000-01-01",  end_date = "2024-01-01",
       asset_names = asset,
       collection = collection,
@@ -157,7 +162,7 @@ get_stac_raster <- function(poly, collection, asset, folder = NULL, crs = NULL) 
       output_filename = filepath,
     )
   } else {
-    message("File detected. Loading from disc.")
+    message("File detected. Loading from disk.")
   }
   
   rast(filepath)
@@ -178,29 +183,4 @@ read_renoster <- function(filepath, id_list) {
   st_read(filepath) %>%
     select(ProjectID, geom) %>%
     filter(ProjectID %in% id_list)
-}
-
-#' @title Read KML files
-#' @description
-#' A function to read in, clean and fix geometries of project boundaries stored
-#' in .kml formats (e.g., the Verra dataset). Files with no layers or other
-#' errors will be silently skipped. Files with multiple layers will have all
-#' layers read in and combined into a single sf object.
-#' 
-#' @usage read_kml(path)
-#' 
-#' @param path string. A filepath to the data file.
-
-read_kml <- function(filepath) {
-  
-  layer_names <- possibly(st_layers)(filepath)$name
-  
-  st_read2 <- possibly(st_read)
-  
-  if(!is.null(layer_names)) {
-    layers <- map(layer_names, function(name) st_read2(filepath, layer = name, quiet = TRUE))
-    layers <- bind_rows(layers)
-    
-    layers
-  }
 }
