@@ -17,7 +17,7 @@ get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = 
   file_paths <- Sys.glob(paste0(folder, "/*", ext))
   
   if (!is.null(match)) {
-    match <- data_lookup[data_lookup$country == match,][[col]]
+    match <- data_lookup[data_lookup$country == match,][[source]]
     
     files <- file_paths[str_detect(file_paths, match)]
   } else {
@@ -57,7 +57,7 @@ get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = 
 
 get_osm <- function(folder, match, source = "osm", type = "highway") {
   
-  match <- data_lookup[data_lookup$country == match,][[col]]
+  match <- data_lookup[data_lookup$country == match,][[source]]
   
   file_path <- Sys.glob(paste0(folder, "/*", match, "*.pbf"))
   
