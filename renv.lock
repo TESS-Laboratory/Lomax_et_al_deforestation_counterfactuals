@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.3.3",
+    "Version": "4.4.1",
     "Repositories": [
       {
         "Name": "mlrorg",
@@ -66,16 +66,6 @@
         "utils"
       ],
       "Hash": "d9c655b30a2edc6bb2244c1d1e8d549d"
-    },
-    "PROJ": {
-      "Package": "PROJ",
-      "Version": "0.4.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R"
-      ],
-      "Hash": "1cc61d76dc4058622a28742c0eb362f9"
     },
     "R6": {
       "Package": "R6",
@@ -366,17 +356,6 @@
         "lazyeval"
       ],
       "Hash": "ab12c7b080a57475248a30f4db6298c0"
-    },
-    "crsmeta": {
-      "Package": "crsmeta",
-      "Version": "0.3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "methods"
-      ],
-      "Hash": "76ad515a0acb138c0e93f017c7aefd11"
     },
     "curl": {
       "Package": "curl",
@@ -757,27 +736,6 @@
       ],
       "Hash": "ac107251d9d9fd72f0ca8049988f1d7f"
     },
-    "httr2": {
-      "Package": "httr2",
-      "Version": "1.0.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "R6",
-        "cli",
-        "curl",
-        "glue",
-        "lifecycle",
-        "magrittr",
-        "openssl",
-        "rappdirs",
-        "rlang",
-        "vctrs",
-        "withr"
-      ],
-      "Hash": "03d741c92fda96d98c3a3f22494e3b4a"
-    },
     "isoband": {
       "Package": "isoband",
       "Version": "0.2.7",
@@ -1023,19 +981,6 @@
       ],
       "Hash": "e2fca3e12e4db979dccc6e519b10a7ee"
     },
-    "lubridate": {
-      "Package": "lubridate",
-      "Version": "1.9.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "generics",
-        "methods",
-        "timechange"
-      ],
-      "Hash": "680ad542fbcf801442c83a6ac5a2126c"
-    },
     "lwgeom": {
       "Package": "lwgeom",
       "Version": "0.2-13",
@@ -1132,27 +1077,6 @@
       ],
       "Hash": "ea2475b073243d9d338aa8f086ce973e"
     },
-    "osmdata": {
-      "Package": "osmdata",
-      "Version": "0.2.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "Rcpp",
-        "curl",
-        "httr2",
-        "lubridate",
-        "magrittr",
-        "methods",
-        "reproj",
-        "rvest",
-        "tibble",
-        "utils",
-        "xml2"
-      ],
-      "Hash": "484fb25b6267ae0a885511dbac53f193"
-    },
     "parallelly": {
       "Package": "parallelly",
       "Version": "1.37.1",
@@ -1235,16 +1159,6 @@
         "prettyunits"
       ],
       "Hash": "f4625e061cb2865f111b47ff163a5ca6"
-    },
-    "proj4": {
-      "Package": "proj4",
-      "Version": "1.0-14",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R"
-      ],
-      "Hash": "1e3f9f3e86ddcb8542794fec82eee6e2"
     },
     "proxy": {
       "Package": "proxy",
@@ -1359,19 +1273,6 @@
       ],
       "Hash": "32c3f93e8360f667ca5863272ec8ba6a"
     },
-    "reproj": {
-      "Package": "reproj",
-      "Version": "0.4.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "PROJ",
-        "R",
-        "crsmeta",
-        "proj4"
-      ],
-      "Hash": "35bffc8308f82594dcf28e374488d0cb"
-    },
     "rlang": {
       "Package": "rlang",
       "Version": "1.1.3",
@@ -1446,25 +1347,6 @@
       ],
       "Hash": "d0937bcdd648726a4c7af0fcd0fa49cc"
     },
-    "rvest": {
-      "Package": "rvest",
-      "Version": "1.0.4",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "glue",
-        "httr",
-        "lifecycle",
-        "magrittr",
-        "rlang",
-        "selectr",
-        "tibble",
-        "xml2"
-      ],
-      "Hash": "0bcf0c6f274e90ea314b812a6d19a519"
-    },
     "s2": {
       "Package": "s2",
       "Version": "1.1.6",
@@ -1510,19 +1392,6 @@
         "viridisLite"
       ],
       "Hash": "c19df082ba346b0ffa6f833e92de34d1"
-    },
-    "selectr": {
-      "Package": "selectr",
-      "Version": "0.4-2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "R6",
-        "methods",
-        "stringr"
-      ],
-      "Hash": "3838071b66e0c566d55cc26bd6e27bf4"
     },
     "sf": {
       "Package": "sf",
@@ -1732,17 +1601,6 @@
       ],
       "Hash": "829f27b9c4919c16b593794a6344d6c0"
     },
-    "timechange": {
-      "Package": "timechange",
-      "Version": "0.3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cpp11"
-      ],
-      "Hash": "c5f3c201b931cd6474d17d8700ccb1c8"
-    },
     "tinytex": {
       "Package": "tinytex",
       "Version": "0.50",
@@ -1757,8 +1615,8 @@
       "Package": "tmap",
       "Version": "3.99.9000",
       "Source": "GitHub",
-      "Remotes": "mtennekes/cols4all, r-tmap/tmaptools",
       "RemoteType": "github",
+      "Remotes": "mtennekes/cols4all, r-tmap/tmaptools",
       "RemoteHost": "api.github.com",
       "RemoteRepo": "tmap",
       "RemoteUsername": "r-tmap",
@@ -1960,19 +1818,6 @@
         "tools"
       ],
       "Hash": "ab6371d8653ce5f2f9290f4ec7b42a8e"
-    },
-    "xml2": {
-      "Package": "xml2",
-      "Version": "1.3.6",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "methods",
-        "rlang"
-      ],
-      "Hash": "1d0336142f4cd25d8d23cd3ba7a8fb61"
     },
     "yaml": {
       "Package": "yaml",
