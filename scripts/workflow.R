@@ -1,10 +1,9 @@
 ## Script to generate and sample hexagonal or square grids of a specified area
 ## and minimum forest cover within a country polygon.
 
-## Setup packages and functions --------
 source("scripts/load.R")
 
-## Set parameters --------
+## 1. Set parameters --------
 
 # Spatial and temporal range
 COUNTRY <- "Colombia"  # Target country
@@ -27,7 +26,7 @@ OUTPUT_PATH <- "data/processed/vector/sample_polygons"  # Output directory
 SEED <- 111  # Random number seed
 AGG <- 5 # Factor to aggregate rasters to speed calculation/test pipeline
 
-## Load datasets --------
+## 2. Load datasets --------
 
 # Lookup table for efficient data I/O
 data_lookup <- read_csv("data/raw/csv/data_lookup.csv")  # TO COMPLETE
@@ -40,6 +39,7 @@ econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
 
 # Raster data
 fc <- get_raster("data/processed/raster/tmf", match = COUNTRY)
+fc_loss <- get_tiled_raster("data/raw/raster/tmf_loss/", match = COUNTRY)
 biomass <- get_stac_raster(collection = "hgb", asset = "aboveground")
 cropland <- get_tiled_raster("data/raw/raster/cropland")
 dem <- get_stac_raster(collection = "cop-dem-glo-90", asset = "data", folder = "dem")
@@ -67,7 +67,7 @@ redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
   filter(Country == COUNTRY) %>%
   st_transform(CRS)
 
-## Generate polygon grids --------
+## 3. Generate polygon grids and buffers --------
 
 grid <- generate_polygons(
   country,
@@ -85,7 +85,7 @@ grid_buffer <- generate_buffers(
   buffer_only = FALSE,
   joinStyle = "MITRE")
 
-## Filter to polygons meeting selection criteria --------
+## 4. Filter to polygons meeting selection criteria --------
 
 # Remove polygons intersecting REDD projects or protected areas designated since 1990.
 protected_areas_new <- filter(protected_areas, STATUS_YR >= 1991)
@@ -100,18 +100,47 @@ grid_buffer_filtered <- filter(grid_buffer, ID %in% grid_filtered$ID)
 
 fc1990 <- subset(fc, "Dec1990") %in% c(1, 2, 4)  # Undisturbed, degraded or regrowth forest
 
-grid_fc <- grid_filtered %>%
+grid_threshold <- grid_filtered %>%
   poly_extract(fc1990) %>%
   filter(Dec1990 >= FC_THRESHOLD / 100)
 
-grid_buffer_fc <- grid_buffer %>%
-  filter(ID %in% grid_fc$ID) %>%
-  poly_extract(fc_binary)
+grid_buffer_threshold <- grid_buffer %>%
+  filter(ID %in% grid_threshold$ID)
 
-## Extract annual forest loss per polygon --------
+## Prepare forest cover data
+# (i) Annual forest cover loss
+# (ii) Jurisdiction-level annual forest cover loss (polygons with 32 loss columns)
+# (iii) Pixelwise distance to forest edge
 
-grid_fc_loss <- poly_extract(grid_fc, fc_loss, fun = sum_by_value)
-grid_buffer_fc_loss <- poly_extract(grid_buffer_fc, fc_loss, fun = sum_by_value) %>%
+## Prepare other data layers
+# (i) Calculate slope from DEM
+# (ii) Mask other raster layers to forest area in project start year
+# (iii) Calculate forest fraction in protected areas
+
+## Extract forest cover metrics
+
+## Extract other variables
+
+## Create panel data and drop geometries
+## Create separate geometry object for calculation of proximity
+
+
+
+## Extract annual forest loss per polygon in poly and buffer --------
+
+# Convert annual forest classifications to binary forest loss
+# tic()
+# fc_loss <- app(fc, tmf_to_defor)
+# toc()
+
+loss_names <- paste0("fc_loss_", 1991:2022)
+grid_fc_loss <- grid_threshold %>%
+  poly_extract(fc_loss) %>%
+  set_names(c("ID", "fc1990", loss_names, "x"))
+
+
+
+grid_buffer_fc_loss <- poly_extract(grid_threshold_fc, fc_loss) %>%
   rename(buffer_treecover2000 = treecover2000, buffer_area = area, buffer_area_frac = area_frac)
 
 grid_fc_loss_all <- grid_fc_loss %>%
