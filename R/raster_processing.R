@@ -10,13 +10,13 @@
 #' @param tmf a SpatRaster object containing the transition codes
 #' 
 
-tmf_to_defor <- function(tmf, degradation = FALSE) {
+tmf_to_defor <- function(tmf) {
   
   # Merge annual codes with lagged annual codes to encode 2-digit transition codes
   
-  transitions <- 10 * tmf[[1:(nlyr(tmf) - 1)]] + tmf[[2:nlyr(tmf)]]
+  transitions <- 10 * tmf[1:(length(tmf) - 1)] + tmf[2:length(tmf)]
   
-  defor_codes <- c(
+    defor_codes <- c(
     13,  # Undisturbed to deforested
     23,  # Degraded to deforested
     43   # Regrowth to deforested
