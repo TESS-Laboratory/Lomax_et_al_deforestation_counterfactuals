@@ -122,7 +122,7 @@ generate_buffers <- function(
 #' @param ... additional arguments to pass to exactextractr::exact_extract()
 #' 
 
-poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
+poly_extract <- function(grid, layer, fun = "weighted_mean", id_col = "ID", ...) {
   
   if(is.character(fun)) {
     
@@ -133,14 +133,14 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
         layer, 
         grid, 
         fun = fun, 
+        weights = "area",
         ...,
         force_df = TRUE,
         full_colnames = TRUE,
         coverage_area = TRUE,
         append_cols = id_col,
-        max_cells_in_memory = 3e+08
-      ) %>%
-      rename_with(.cols = starts_with(fun), ~ gsub(paste0(fun, "."), "", .x))
+        max_cells_in_memory = 1e+09
+      )
     
   } else if (is_function(fun)) {
     
@@ -151,12 +151,13 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
        layer,
        grid,
        fun = fun,
+       weights = "area",
        ...,
        force_df = TRUE,
        coverage_area = TRUE,
        summarize_df = TRUE,
        append_cols = "ID",
-       max_cells_in_memory = 3e+08
+       max_cells_in_memory = 1e+09
      )
    
   } else {
