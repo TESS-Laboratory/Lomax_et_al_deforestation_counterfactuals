@@ -49,6 +49,7 @@ generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = 
   # Assign polygon ID
   
   grid_contained$ID <- seq_len(nrow(grid_contained))
+  grid_contained$poly_area <- area_km2
 
   grid_contained
 }
@@ -122,7 +123,7 @@ generate_buffers <- function(
 #' @param ... additional arguments to pass to exactextractr::exact_extract()
 #' 
 
-poly_extract <- function(grid, layer, fun = "weighted_mean", id_col = "ID", ...) {
+poly_extract <- function(poly, layer, fun = "weighted_mean", id_col = "ID", ...) {
   
   if(is.character(fun)) {
     
@@ -136,7 +137,6 @@ poly_extract <- function(grid, layer, fun = "weighted_mean", id_col = "ID", ...)
         weights = "area",
         ...,
         force_df = TRUE,
-        full_colnames = TRUE,
         coverage_area = TRUE,
         append_cols = id_col,
         max_cells_in_memory = 1e+09
@@ -156,7 +156,8 @@ poly_extract <- function(grid, layer, fun = "weighted_mean", id_col = "ID", ...)
        force_df = TRUE,
        coverage_area = TRUE,
        summarize_df = TRUE,
-       append_cols = "ID",
+       append_cols = id_col,
+       colname_fun = function(values) values,
        max_cells_in_memory = 1e+09
      )
    
@@ -172,49 +173,39 @@ poly_extract <- function(grid, layer, fun = "weighted_mean", id_col = "ID", ...)
   output
 }
 
-#' @title Sum by value
-#' @description 
-#' A function only for use with grid_extract that returns the total area covered
-#' by each value in a categorical raster in a wide format data frame
+#' @title Calculate intersection
+#' @description Calculates the fraction of grid polygons intersecting with each
+#' of another set of polygons
 #' 
-#' @usage sum_by_value(df, wide = FALSE)
+#' @usage calc_intersection(x, y, area_col = NULL, drop_geom = TRUE)
 #' 
-#' @param df a data.frame of columns "value" and "coverage_area" returned by
-#' exactextractr::exact_extract
-#' @param wide logical. Should the returned dataframe be wide format (one column per
-#' pixel value) or long format?
-#' 
+#' @param x sf object. The target polygon
+#' @param y sf object. The polygons for which to calculate fractional cover
+#' @param area_col character. An optional column name in x containing the total
+#' area of each polygon. If NULL, this will be calculated with st_area().
+#' @param drop_geom logical. Should the intersected geometries be dropped,
+#' leaving a non-sf data frame? Defaults to TRUE.
 
-sum_by_value <- function(df, wide = FALSE) {
+calc_intersection <- function(x, y, area_col = NULL, drop_geom = TRUE) {
   
-  if (nrow(df) == 0) {
-    
-    NA
-    
+  if (is.null(area_col)) {
+    x$poly_area.x <- st_area(x)
   } else {
-    
-    output <- df %>%
-      group_by(value) %>%
-      summarise(area = sum(coverage_area)) %>%
-      ungroup() %>%
-      mutate(area_frac = area / sum(area)) %>%
-      arrange(value) %>%
-      rename(cell_value = value)
-    
-    if (wide == TRUE) {
-      
-      output <- pivot_wider(output, names_from = "cell_value", values_from = "area_frac")
-      
-    }
-    
-    output
-    
+    x$poly_area.x <- x[[area_col]]
   }
-}
+  
+  intersection_area <- x %>%
+    st_intersection(y) %>%
+    mutate(area_frac = st_area(.) / poly_area.x) %>%
+    select(-poly_area.x)
+  
+  if (drop_geom == TRUE) {
+    intersection_area <- st_drop_geometry(intersection_area)
+  }
+  
+  intersection_area
 
-#' @title Clean NAs
-#' @description Repairs NA values left from incomplete matching after joining
-#' two data frames.
+}
 
 #' @title Calculate cumulative deforestation
 #' @description

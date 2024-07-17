@@ -79,14 +79,22 @@ get_osm <- function(folder, match, source = "osm", type = "highway") {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(folder, match = NULL, layer = NULL) {
+get_raster <- function(folder, match = NULL, layer = NULL, names = NULL) {
   
   file_paths <- Sys.glob(paste0(folder, "/*", match, "*.tif*"))
+  
+  if (length(file_paths) == 0) {
+    file_paths <- Sys.glob(paste0(folder, "/*", match, "*"))
+  }
   
   raster <- rast(file_paths)
   
   if (!is.null(layer)) {
     raster <- raster[[layer]]
+  }
+  
+  if (!is.null(names)) {
+    names(raster) <- names
   }
   
   raster
@@ -143,7 +151,7 @@ get_tiled_raster <- function(folder, match = "", layer = NULL, names = NULL, cro
 #' @param folder character. Then name of the output folder in "data/raw/raster/"
 #' 
 
-get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY, folder = NULL) {
+get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY, folder = NULL, names = NULL) {
   
   if(is.null(folder)) {
     folder <- collection
@@ -165,7 +173,13 @@ get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY
     message("File detected. Loading from disk.")
   }
   
-  rast(filepath)
+  raster <- rast(filepath)
+  
+  if (!is.null(names)) {
+    names(raster) <- names
+  }
+  
+  raster
 }
 
 #' @title Read Renoster polygons
