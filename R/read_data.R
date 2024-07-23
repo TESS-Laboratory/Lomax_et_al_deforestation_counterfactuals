@@ -24,22 +24,16 @@ get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = 
     files <- file_paths
   }
   
-  sf_list <- map(files, st_read)
+  sf_combined <- files %>%
+    map(st_read) %>%
+    bind_rows()
   
   if(!is.null(poly)) {
+    message("Filtering to those that intersect with polygon.")
+    poly_transform <- st_transform(poly, crs = st_crs(sf_combined))
     
-    poly_transform <- st_transform(poly, crs = st_crs(sf_list[[1]]))
-    
-    intersects <- sf_list %>%
-      map(st_bbox) %>%
-      map(st_as_sfc) %>%
-      map(st_intersects, y = poly_transform, sparse = FALSE) %>%
-      unlist()
-    
-    sf_list <- sf_list[intersects]
+    sf_combined <- st_filter(sf_combined, poly_transform)
   }
-  
-  sf_combined <- bind_rows(sf_list)
 
   sf_combined
     
@@ -61,10 +55,10 @@ get_osm <- function(folder, match, source = "osm", type = "highway") {
   
   file_path <- Sys.glob(paste0(folder, "/*", match, "*.pbf"))
   
-  data <- suppressWarnings(st_read(file_path, layer = "lines")) %>%
+  lines <- st_read(file_path, layer = "lines") %>%
     filter(!is.na(.data[[type]]))
-
-  data
+  
+  lines
 }
 
 
