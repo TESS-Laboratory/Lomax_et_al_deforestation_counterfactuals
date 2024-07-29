@@ -49,16 +49,30 @@ get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = 
 #' @param match character. A string (e.g., country name) to match in the target file(s)
 #' @param layer character. The key to filter resulting data on
 
-get_osm <- function(folder, match, source = "osm", type = "highway") {
+get_osm <- function(proc_folder, raw_folder, match, source = "osm", type = "highway") {
   
   match <- data_lookup[data_lookup$country == match,][[source]]
   
-  file_path <- Sys.glob(paste0(folder, "/*", match, "*.pbf"))
+  proc_files <- Sys.glob(paste0(proc_folder, "/*", match, "*.gpkg"))
   
-  lines <- st_read(file_path, layer = "lines") %>%
-    filter(!is.na(.data[[type]]))
+  if (length(proc_files) == 0) {
+    
+    message("Processed GPKG not found. Converting from OSM PBF.")
+    raw_filepath <- Sys.glob(paste0(raw_folder, "/*", match, "*.pbf"))
+    dest_filepath <- paste0(proc_folder, "/osm_", match, ".gpkg")
+    gdal_utils("vectortranslate", raw_filepath, dest_filepath)
+    
+    lines <- st_read(dest_filepath, layer = "lines")
+    
+  } else {
+    
+    lines <- st_read(proc_files[1], layer = "lines")
+    
+  }
   
-  lines
+  output <- filter(lines, !is.na(.data[[type]]))
+    
+  output
 }
 
 
@@ -73,19 +87,17 @@ get_osm <- function(folder, match, source = "osm", type = "highway") {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(folder, match = NULL, layer = NULL, names = NULL) {
+get_raster <- function(folder, match = NULL, names = NULL, ext = ".tif", source = "gee") {
   
-  file_paths <- Sys.glob(paste0(folder, "/*", match, "*.tif*"))
-  
-  if (length(file_paths) == 0) {
-    file_paths <- Sys.glob(paste0(folder, "/*", match, "*"))
+  if (!is.null(match)) {
+    match <- data_lookup[data_lookup$country == match,][[source]]
+    file_paths <- Sys.glob(paste0(folder, "/*", match, "*", ext, "*"))
+    
+  } else {
+    file_paths <- Sys.glob(paste0(folder, "/*", ext, "*"))
   }
   
   raster <- rast(file_paths)
-  
-  if (!is.null(layer)) {
-    raster <- raster[[layer]]
-  }
   
   if (!is.null(names)) {
     names(raster) <- names
@@ -105,11 +117,14 @@ get_raster <- function(folder, match = NULL, layer = NULL, names = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target rasters.
 
-get_tiled_raster <- function(folder, match = "", layer = NULL, names = NULL, crop = NULL) {
+get_tiled_raster <- function(folder, match = NULL, layer = NULL, names = NULL, ext = ".tif", source = "gee") {
   
-  # Find raster tiles
-  file_paths <- Sys.glob(paste0(folder, "/*.tif"))
-  file_paths <- file_paths[grepl(match, file_paths)]
+  if (!is.null(match)) {
+    match <- data_lookup[data_lookup$country == match,][[source]]
+    file_paths <- Sys.glob(paste0(folder, "/*", match, "*", ext, "*"))
+  } else {
+    file_paths <- Sys.glob(paste0(folder, "/*", ext, "*"))
+  }
   
   # Create virtual raster
   vrt <- vrt(file_paths)
@@ -121,10 +136,6 @@ get_tiled_raster <- function(folder, match = "", layer = NULL, names = NULL, cro
   
   if (!is.null(names)) {
     names(vrt) <- names
-  }
-  
-  if (!is.null(crop)) {
-    vrt <- crop(vrt, country)
   }
   
   # Return virtual raster dataset
@@ -174,21 +185,4 @@ get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY
   }
   
   raster
-}
-
-#' @title Read Renoster polygons
-#' @description
-#' A function to read in, clean and fix geometries of REDD project boundaries
-#' held in .gpkg format in the Renoster dataset (Karnik et al., pp)
-#' 
-#' @usage read_renoster(path, skip = NULL)
-#' 
-#' @param path string. A filepath to the data file.
-#' @param skip (optional) string. A vector of project codes to skip (e.g., if they contain
-#' unfixable geometries). Codes should be in the format "XXX123", e.g., "VCS381".
-
-read_renoster <- function(filepath, id_list) {
-  st_read(filepath) %>%
-    select(ProjectID, geom) %>%
-    filter(ProjectID %in% id_list)
 }
