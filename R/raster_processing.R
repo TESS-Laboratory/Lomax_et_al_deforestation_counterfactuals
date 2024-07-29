@@ -70,11 +70,11 @@ fast_distance <- function(raster, target_polys) {
 
 mask_to_forest <- function(list, forest, combine = TRUE) {
   
-  resample_verbose <- function(x, y, ...) {
+  project_verbose <- function(x, y, ...) {
     name <- names(x)
-    message("Resampling layer: ", name)
+    message("Reprojecting layer: ", name)
     tic()
-    z <- resample(x, y, ...)
+    z <- project(x, y, ...)
     toc()
     z
   }
@@ -89,11 +89,10 @@ mask_to_forest <- function(list, forest, combine = TRUE) {
   }
   
   message("Resampling rasters to forest cover CRS and grid")
-  list_resampled <- map(list, resample_verbose, y = forest, method = "bilinear", threads = TRUE)
-  list_resampled
+  list_reprojected <- map(list, project_verbose, y = forest, method = "bilinear", threads = TRUE)
   
   message("Cropping and masking rasters to forest cover area")
-  list_masked <- map(list_resampled, crop_verbose, y = forest, mask = TRUE)
+  list_masked <- map(list_reprojected, crop_verbose, y = forest, mask = TRUE)
 
   if (combine == TRUE) {
     message("Combining raster list")
