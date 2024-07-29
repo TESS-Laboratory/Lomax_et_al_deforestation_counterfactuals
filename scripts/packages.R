@@ -7,11 +7,12 @@ library(geodata)
 library(readr)
 library(dplyr)
 library(tidyr)
+library(terra)
+library(sf)
 library(stringr)
 library(magrittr)
 library(purrr)
-library(sf)
-library(terra)
+library(ggplot2)
 library(units)
 
 # data analysis
@@ -23,4 +24,4 @@ library(landscapemetrics)
 # library(ggplot2)
 # 
 # # time tracking
-# library(tictoc)
+library(tictoc)
