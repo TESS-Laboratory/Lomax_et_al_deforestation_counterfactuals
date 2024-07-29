@@ -49,7 +49,6 @@ generate_polygons <- function(geometry, buffer = 0, shape = "hex", area, unit = 
   # Assign polygon ID
   
   grid_contained$ID <- seq_len(nrow(grid_contained))
-  grid_contained$poly_area <- area_km2
 
   grid_contained
 }
@@ -123,7 +122,7 @@ generate_buffers <- function(
 #' @param ... additional arguments to pass to exactextractr::exact_extract()
 #' 
 
-poly_extract <- function(poly, layer, fun = "weighted_mean", id_col = "ID", ...) {
+poly_extract <- function(poly, layer, fun = "weighted_mean", id_col = "ID", col_prefix = "", ...) {
   
   if(is.character(fun)) {
     
@@ -136,13 +135,14 @@ poly_extract <- function(poly, layer, fun = "weighted_mean", id_col = "ID", ...)
         fun = fun, 
         weights = "area",
         ...,
+        full_colnames = TRUE,
         force_df = TRUE,
         append_cols = id_col,
         max_cells_in_memory = 1e+9
       )
     
     extract <- extract %>%
-      rename_with(str_replace, .cols = starts_with(fun), pattern = "weighted_mean.", replacement = "")
+      rename_with(str_replace, .cols = starts_with(fun), pattern = paste0(fun, "."), replacement = col_prefix)
     
   } else if (is_function(fun)) {
     
@@ -187,7 +187,7 @@ poly_extract <- function(poly, layer, fun = "weighted_mean", id_col = "ID", ...)
 #' @param drop_geom logical. Should the intersected geometries be dropped,
 #' leaving a non-sf data frame? Defaults to TRUE.
 
-calc_intersection <- function(x, y, area_col = NULL, drop_geom = TRUE) {
+calc_intersection <- function(x, y, area_col = NULL, drop_geom = TRUE, frac_col = NULL) {
   
   if (is.null(area_col)) {
     x$poly_area.x <- st_area(x)
@@ -202,6 +202,10 @@ calc_intersection <- function(x, y, area_col = NULL, drop_geom = TRUE) {
   
   if (drop_geom == TRUE) {
     intersection_area <- st_drop_geometry(intersection_area)
+  }
+  
+  if(!is.null(frac_col)) {
+    colnames(intersection_area)[colnames(intersection_area) == "area_frac"] <- frac_col
   }
   
   intersection_area
@@ -227,7 +231,7 @@ rasterize_lines <- function(lines, target, other = NA) {
     lines <- st_transform(lines, crs(target))
   }
   
-  output <- terra::rasterize(
+  raster <- terra::rasterize(
     lines,
     target,
     field = 1,
@@ -236,5 +240,52 @@ rasterize_lines <- function(lines, target, other = NA) {
     touches = TRUE
   )
   
-  output
+  raster
+}
+
+#' @title Filter disjoint
+#' @description Filters sf objects to those that do not intersect with a second
+#' sf object. Unlike st_filter, this works if the second object is empty.
+#' 
+#' @usage filter_disjoint(x, y)
+#' 
+#' @param x sf object. The object to filter
+#' @param y sf object. The object against which to filter
+
+filter_disjoint <- function(x, y) {
+  
+  if (nrow(y) > 0) {
+    y_union <- y %>%
+      st_collection_extract() %>%
+      st_union()
+    
+    x_filtered <- st_filter(x, y_union, .predicate = st_disjoint)
+  } else {
+    x_filtered <- x
+  }
+  x_filtered
+}
+
+#' @title Extract from list
+#' @description Iteratively poly_extract over a list of SpatRasters, joining
+#' the results into a single wide-format data frame.
+#' 
+#' @usage extract_from_list(poly, list, ...)
+#' 
+#' @param poly sf object for which to extract values
+#' @param list a list of SpatRasters from which to sequentially extract values
+#' @param ... additional arguments to pass to poly_extract
+
+extract_from_list <- function(poly, list, ...) {
+  
+  poly_list_extract <- list %>%
+    map(poly_extract, poly = poly, ...) %>%
+    map(st_drop_geometry) %>%
+    reduce(left_join)
+  
+  poly_joined <- poly %>%
+    select(ID) %>%
+    left_join(poly_list_extract)
+  
+  poly_joined
 }
