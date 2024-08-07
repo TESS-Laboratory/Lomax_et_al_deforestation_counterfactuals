@@ -195,20 +195,20 @@ calc_intersection <- function(x, y, area_col = NULL, drop_geom = TRUE, frac_col 
     x$poly_area.x <- x[[area_col]]
   }
   
-  intersection_area <- x %>%
+  intersection_frac <- x %>%
     st_intersection(y) %>%
-    mutate(area_frac = st_area(.) / poly_area.x) %>%
+    mutate(area_frac = drop_units(st_area(.) / poly_area.x)) %>%
     select(-poly_area.x)
   
   if (drop_geom == TRUE) {
-    intersection_area <- st_drop_geometry(intersection_area)
+    intersection_frac <- st_drop_geometry(intersection_frac)
   }
   
   if(!is.null(frac_col)) {
-    colnames(intersection_area)[colnames(intersection_area) == "area_frac"] <- frac_col
+    colnames(intersection_frac)[colnames(intersection_frac) == "area_frac"] <- frac_col
   }
   
-  intersection_area
+  intersection_frac
 
 }
 

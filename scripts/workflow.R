@@ -1,12 +1,12 @@
-## Script to generate and sample hexagonal or square grids of a specified area
-## and minimum forest cover within a country polygon.
+#### Data preparation script
+#### Generates a grid of a specified area and extracts key covariates into a dataframe
 
 source("scripts/load.R")
 
 ### 1. Set parameters --------
 
 # Spatial and temporal range
-COUNTRY <- "Cote d'Ivoire"  # Target country
+COUNTRY <- "Colombia"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
 
@@ -15,7 +15,7 @@ COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when gener
 POLY_SIZE <- 59000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
 POLY_BUFFER_RATIO <- 1 # polygon buffer area as ratio of polygon area
-SAMPLE_N <- 100  # number of polygons to sample
+SAMPLE_N <- 25  # number of polygons to sample per stratum
 SAMPLE_STRATA <- 4  # number of forest loss strata
 
 # Forest definitions
@@ -193,14 +193,16 @@ if(nrow(econ_vars) > 0) {
   country_adm1_vars <- left_join(country_adm1_vars, econ_vars_wide, by = c("NAME_1" = "region"))
 }
 
-grid_adm1_intersection <- calc_intersection(grid_threshold, country_adm1_vars, frac_col = "jurisdiction_frac")
+grid_adm1_intersection <- grid_threshold %>%
+  calc_intersection(country_adm1_vars, frac_col = "jurisdiction_frac") %>%
+  group_by(ID) %>%
+  summarise(across(.cols = starts_with("jurisdiction_loss"), .fns = ~ sum(.x * jurisdiction_frac)))
 
 ## (vi) Forest fraction in protected areas
 
-# Find intersection of polygons with PAs
-tic()
+# Find intersection of start year forest area in polygons with PAs
 grid_pa_intersection <- grid_threshold %>%
-  poly_extract(fc_start) %>%
+  poly_extract(fc_start_agg) %>%
   mutate(poly_area = st_area(x)) %>%
   st_intersection(st_union(st_collection_extract(protected_areas))) %>%
   mutate(int_area = st_area(x))
@@ -208,15 +210,23 @@ toc()
 
 # Calculate area of forest in PAs as frac of total forest in polygon
 grid_pa_intersection_fc <- grid_pa_intersection %>%
-  poly_extract(fc_start, col_prefix = "int_") %>%
+  poly_extract(fc_start_agg, col_prefix = "int_") %>%
+  st_drop_geometry() %>%
   mutate(fc_protected = int_fc_start * int_area) %>%
-  mutate(protected_frac = drop_units(fc_protected / (fc_start * poly_area))) %>%
+  mutate(protected_frac = drop_units(fc_protected / (fc_start * poly_area)))
+
+# Restore dropped (non-intersecting) NA columns with 0 values
+grid_pa_frac <- grid_pa_intersection_fc %>%
+  right_join(st_drop_geometry(grid_threshold)) %>%
   select(ID, protected_frac) %>%
-  st_drop_geometry()
+  replace_na(list("protected_frac" = 0))
 
 ## (vii) Calculate fractional polygon overlap with ecoregion boundaries
 
-grid_ecoregion_intersection <- calc_intersection(grid_threshold, ecoregions, frac_col = "ecoregion_frac")
+grid_ecoregion_intersection <- grid_threshold %>%
+  calc_intersection(ecoregions, frac_col = "eco_frac") %>%
+  group_by(ID) %>%
+  nest(.key = "eco_frac")
 
 ## (viii) Calculate distance from nearest river and road
 
@@ -252,35 +262,46 @@ grid_fc_buffer_vars <- grid_buffer_threshold %>%
 ## Join with vector variables and create merged wide-format data frame 
 ##### !! Issue - where a polygon intersects multiple adm1 or ecoregions, its row is duplicated
 ##### Need a better way to summarise and retain data where multiple intersections exist before merging.
-vector_vars <- list(grid_fc_raster_vars, grid_fc_buffer_vars, grid_adm1_intersection, grid_ecoregion_intersection, grid_pa_intersection_fc)
+all_vars <- list(grid_fc_raster_vars, grid_fc_buffer_vars, grid_adm1_intersection, grid_ecoregion_intersection, grid_pa_frac)
 
-grid_fc_all_vars <- reduce(vector_vars, full_join)
+grid_fc_all_vars <- all_vars %>%
+  reduce(full_join) %>%
+  mutate(cropland = (cropland + POLY_BUFFER_RATIO * buffer_cropland) / (1 + POLY_BUFFER_RATIO)) %>%
+  select(-buffer_cropland)
 
 ## Pull geometry into separate object and convert to long-format df
 
-grid_geoms <- select(grid_fc_all_vars, ID, x)
-grid_vars_long <- grid_fc_all_vars %>%
-  st_drop_geometry() %>%
-  pivot_longer(cols = contains(".")) %>%
-  separate_wider_delim(cols = "name", delim = ".", names = c("var", "year")) %>%
-  pivot_wider(names_from = "var", values_from = "value") %>%
-  mutate(buffer_cropland = POLY_BUFFER_RATIO * buffer_cropland,
-         cropland = mean(c_across(contains("cropland"))))
+# grid_geoms <- select(grid_fc_all_vars, ID, x)
+# grid_vars_long <- grid_fc_all_vars %>%
+#   st_drop_geometry() %>%
+#   pivot_longer(cols = contains(".")) %>%
+#   separate_wider_delim(cols = "name", delim = ".", names = c("var", "year")) %>%
+#   pivot_wider(names_from = "var", values_from = "value")
 
 ### 7. Take stratified sample of polygons by actual cumulative deforestation after start year --------
+# TO DO: REWRITE OR REPACKAGE IN FUNCTION
 
-grid_loss_strata <- grid_vars_long %>%
+grid_loss_strata <- grid_fc_all_vars %>%
+  st_drop_geometry() %>%
+  select(ID, starts_with("loss")) %>%
+  pivot_longer(cols = starts_with("loss")) %>%
+  separate_wider_delim(cols = "name", delim = ".", names = c("var", "year")) %>%
+  pivot_wider(names_from = "var", values_from = "value") %>%
   group_by(ID) %>%
   filter(year > START_YEAR) %>%
   summarise(cum_loss = sum(loss)) %>%
   mutate(stratum = cut_interval(cum_loss, n = SAMPLE_STRATA, labels = FALSE))
 
 # Sample either 25 per group or the smallest available group size
-sample_n <- min(c(25, count(sample_ids, stratum)$n))
+
+# sample_n <- min(c(25, count(grid_loss_strata, stratum)$n))
 
 set.seed(SEED)
-grid_sample_ids <- slice_sample(grid_loss_strata, n = sample_n, by = stratum)
+grid_sample_ids <- slice_sample(grid_loss_strata, n = SAMPLE_N, by = stratum)
 
-grid_vars_sample <- left_join(grid_vars_long, grid_sample_ids)
+grid_vars_sample <- left_join(grid_fc_all_vars, grid_sample_ids)
 
+### 8. Save data
+
+write_rds(grid_vars_sample, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
 
