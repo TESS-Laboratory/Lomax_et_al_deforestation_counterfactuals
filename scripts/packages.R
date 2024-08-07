@@ -18,6 +18,7 @@ library(units)
 # data analysis
 library(exactextractr)
 library(landscapemetrics)
+library(augsynth)
 
 # # data visualisation
 # library(tmap)
