@@ -1,17 +1,19 @@
 # Script to mosaic tiled rasters
 
-library(terra)
+library(sf)
+
+COUNTRY <- "Colombia"
 
 # Load
+folder_path <- "data/raw/raster/tmf"
+files <- Sys.glob(paste0(folder_path, "/*", COUNTRY, "*.tif"))
+folder_out <- "data/processed/raster/tmf"
 
-folder_path <- "data/raw/raster/gfc"
-file_prefix <- "gfc_Colombia"
-files <- Sys.glob(paste0(folder_path, "/", file_prefix, "*.tif")) |>
-  lapply(rast)
-
-# Merge, reproject and write
+# Warp and write merged file
 tictoc::tic()
-mosaic <- purrr::reduce(files, mosaic)
+gdal_utils(
+  util = "warp",
+  source = files,
+  destination = paste0(folder_out, "/tmf_", COUNTRY, "_merged.tif")
+)
 tictoc::toc()
-
-writeRaster(mosaic, paste0(folder_path, "/", file_prefix, ".tif"))

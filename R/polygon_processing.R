@@ -106,20 +106,23 @@ generate_buffers <- function(
 }
 
 
-#' @title Extract forest cover
+#' @title Polygon extract
 #' @description
-#' Extracts forest cover % for each member of a grid from an underlying raster.
-#' The raster can contain a percentage or fractional forest cover value,
-#' a binary forest/nonforest or a categorical set of values representing forest.
+#' Extracts values from cells in a SpatRaster that are covered by defined
+#' polygons using an inbuilt or user-defined summary function. A wrapper around
+#' exact_extract from the exactextractr package.
 #' 
-#' @usage extract_grid(grid, layer)
+#' @usage poly_extract(polys, layer)
 #' 
-#' @param grid An sf object containing a grid or other polygons
+#' @param polys An sf object containing a grid or other polygons
 #'   for which to extract values
 #' @param layer A SpatRaster containing values
+#' @param fun A user-defined function or a string representing an inbuilt function
+#' @param id_col character. The name of the polygon ID column in the poly object
+#' @param ... additional arguments to pass to exactextractr::exact_extract()
 #' 
 
-poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
+poly_extract <- function(poly, layer, fun = "weighted_mean", id_col = "ID", col_prefix = "", ...) {
   
   if(is.character(fun)) {
     
@@ -128,15 +131,18 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
     extract <- 
       exact_extract(
         layer, 
-        grid, 
+        poly, 
         fun = fun, 
-        force_df = TRUE,
+        weights = "area",
+        ...,
         full_colnames = TRUE,
-        coverage_area = TRUE,
+        force_df = TRUE,
         append_cols = id_col,
-        max_cells_in_memory = 3e+08
-      ) %>%
-      rename_with(.cols = starts_with(fun), ~ gsub(paste0(fun, "."), "", .x))
+        max_cells_in_memory = 1e+9
+      )
+    
+    extract <- extract %>%
+      rename_with(str_replace, .cols = starts_with(fun), pattern = paste0(fun, "."), replacement = col_prefix)
     
   } else if (is_function(fun)) {
     
@@ -145,14 +151,15 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
    extract <-
      exact_extract(
        layer,
-       grid,
+       poly,
        fun = fun,
+       weights = "area",
        ...,
        force_df = TRUE,
-       coverage_area = TRUE,
        summarize_df = TRUE,
-       append_cols = "ID",
-       max_cells_in_memory = 3e+08
+       append_cols = id_col,
+       colname_fun = function(values) values,
+       max_cells_in_memory = 1e+9
      )
    
   } else {
@@ -161,120 +168,124 @@ poly_extract <- function(grid, layer, fun = "mean", id_col = "ID", ...) {
     
   }
   
-  output <- grid %>%
+  output <- poly %>%
     full_join(extract)
   
   output
 }
 
-#' @title Sum by value
+#' @title Calculate intersection
+#' @description Calculates the fraction of grid polygons intersecting with each
+#' of another set of polygons
+#' 
+#' @usage calc_intersection(x, y, area_col = NULL, drop_geom = TRUE)
+#' 
+#' @param x sf object. The target polygon
+#' @param y sf object. The polygons for which to calculate fractional cover
+#' @param area_col character. An optional column name in x containing the total
+#' area of each polygon. If NULL, this will be calculated with st_area().
+#' @param drop_geom logical. Should the intersected geometries be dropped,
+#' leaving a non-sf data frame? Defaults to TRUE.
+
+calc_intersection <- function(x, y, area_col = NULL, drop_geom = TRUE, frac_col = NULL) {
+  
+  if (is.null(area_col)) {
+    x$poly_area.x <- st_area(x)
+  } else {
+    x$poly_area.x <- x[[area_col]]
+  }
+  
+  intersection_frac <- x %>%
+    st_intersection(y) %>%
+    mutate(area_frac = drop_units(st_area(.) / poly_area.x)) %>%
+    select(-poly_area.x)
+  
+  if (drop_geom == TRUE) {
+    intersection_frac <- st_drop_geometry(intersection_frac)
+  }
+  
+  if(!is.null(frac_col)) {
+    colnames(intersection_frac)[colnames(intersection_frac) == "area_frac"] <- frac_col
+  }
+  
+  intersection_frac
+
+}
+
+#' @title Rasterize lines
 #' @description 
-#' A function only for use with grid_extract that returns the total area covered
-#' by each value in a categorical raster in a wide format data frame
+#' Efficiently converts linestring vectors to a raster with a value of 1 for
+#' any cell that intersects any line in the vector dataset
 #' 
-#' @usage sum_by_value(df, wide = FALSE)
+#' @usage rasterize_lines(lines, target, other = NA)
 #' 
-#' @param df a data.frame of columns "value" and "coverage_area" returned by
-#' exactextractr::exact_extract
-#' @param wide logical. Should the returned dataframe be wide format (one column per
-#' pixel value) or long format?
-#' 
+#' @param lines sf object containing linestring or multilinestring objects
+#' @param target SpatRaster forming the template (crs, extent and resolution)
+#' for the output raster
+#' @param other numeric. The value to assign to grid cells that do not intersect
+#' a vector feature
 
-sum_by_value <- function(df, wide = FALSE) {
-  
-  if (nrow(df) == 0) {
-    
-    NA
-    
-  } else {
-    
-    output <- df %>%
-      group_by(value) %>%
-      summarise(area = sum(coverage_area)) %>%
-      ungroup() %>%
-      mutate(area_frac = area / sum(area)) %>%
-      arrange(value) %>%
-      rename(cell_value = value)
-    
-    if (wide == TRUE) {
-      
-      output <- pivot_wider(output, names_from = "cell_value", values_from = "area_frac")
-      
-    }
-    
-    output
-    
+rasterize_lines <- function(lines, target, other = NA) {
+  if (st_crs(lines) != crs(target)) {
+    message("CRS does not match. Reprojecting lines to target CRS.")
+    lines <- st_transform(lines, crs(target))
   }
+  
+  raster <- terra::rasterize(
+    lines,
+    target,
+    field = 1,
+    fun = "max",
+    background = other,
+    touches = TRUE
+  )
+  
+  raster
 }
 
-#' @title Clean NAs
-#' @description Repairs NA values left from incomplete matching after joining
-#' two data frames.
-
-#' @title Calculate cumulative deforestation
-#' @description
-#' Calculates cumulative deforestation in a set of polygons from
-#' 2000 to a given start year, returning a data frame
+#' @title Filter disjoint
+#' @description Filters sf objects to those that do not intersect with a second
+#' sf object. Unlike st_filter, this works if the second object is empty.
 #' 
-#' @usage calc_cumulative_defor <- function(x, start, area_col, after)
+#' @usage filter_disjoint(x, y)
 #' 
-#' @param x an sf object or data frame generated by poly_extract
-#' @param start numeric. The start year before which to count deforestation
-#' @param area_col object name. The name of the column containing annual area (not a string)
-#' @param after logical. Should cumulative deforestation be calculated from the
-#' start year to the end of the dataset, rather than up to the start year?
+#' @param x sf object. The object to filter
+#' @param y sf object. The object against which to filter
 
-
-calc_cumulative_defor <- function(x, start, area_col, after = FALSE) {
+filter_disjoint <- function(x, y) {
   
-  start_val <- start - 2000
-  
-  if (after == TRUE) {
-    frac_defor <- x %>%
-      group_by(ID) %>%
-      filter(cell_value != 0) %>%
-      summarise(cum_defor = sum(.data[[area_col]] * (cell_value <= start_val), na.rm = T))
+  if (nrow(y) > 0) {
+    y_union <- y %>%
+      st_collection_extract() %>%
+      st_union()
     
+    x_filtered <- st_filter(x, y_union, .predicate = st_disjoint)
   } else {
-    frac_defor <- x %>%
-      group_by(ID) %>%
-      summarise(cum_defor = sum(.data[[area_col]] * (cell_value > start_val), na.rm = T))
+    x_filtered <- x
   }
-  
-  if (any(class(x) == "sf")) {
-    frac_defor <- st_drop_geometry(frac_defor)
-  }
-  
-  frac_defor
+  x_filtered
 }
 
-#' @title Sample polygons
-#' @description
-#' Takes a stratified sample of polygons from a grid, with a warning if the
-#' desired sample size exceeds the total number of polygons
+#' @title Extract from list
+#' @description Iteratively poly_extract over a list of SpatRasters, joining
+#' the results into a single wide-format data frame.
 #' 
-#' @usage sample_polygons(x, n, strata)
+#' @usage extract_from_list(poly, list, ...)
 #' 
-#' @param x An sf polygon object
-#' @param n integer. The number of polygons to sample
-#' @param strata character. The column on which to stratify
-#' 
+#' @param poly sf object for which to extract values
+#' @param list a list of SpatRasters from which to sequentially extract values
+#' @param ... additional arguments to pass to poly_extract
 
-sample_polygons <- function(x, n, strata_col = NULL, strata = 5) {
-  if (n >= nrow(x)) {
-    warning("Requested n exceeds number of polygons in x")
-  }
+extract_from_list <- function(poly, list, ...) {
   
-  if (is.null(strata_col)) {
-    
-    slice_sample(x, n = n)
-    
-  } else {
-    
-    x %>%
-    mutate(quantile = cut_number(.data[[strata_col]], n = strata, labels = FALSE)) %>%
-      slice_sample(n = SAMPLE_N / strata, by = quantile)
-    
-  }
+  poly_list_extract <- list %>%
+    map(poly_extract, poly = poly, ...) %>%
+    map(st_drop_geometry) %>%
+    reduce(left_join)
   
+  poly_joined <- poly %>%
+    select(ID) %>%
+    left_join(poly_list_extract)
+  
+  poly_joined
 }

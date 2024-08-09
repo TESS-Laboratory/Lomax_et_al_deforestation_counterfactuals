@@ -1,91 +1,106 @@
-#' @title Get country
-#' @description
-#' A helper function to extract country boundary polygons from a global dataset
-#' 
-#' @usage get_country(country_name, crs, path)
-#' 
-#' @param country_name the name of the target country
-#' @param crs (optional) a target CRS to transform the polygon
-#' @param path
-#' (optional) a custom filepath to the vector file containing country boundaries
-#' 
-
-get_country <- function(country_name, crs = NULL, path = NULL) {
-  if(is.null(path)) {
-    path <- "data/raw/vector/WB_countries/WB_countries_Admin0_10m.shp"
-  }
-  countries <- st_read(path)
-  country <- dplyr::filter(countries, NAME_EN == country_name)
-  
-  if(!is.null(crs)) {
-    country <- st_transform(country, crs = crs)
-    message("Reprojected to ", crs)
-  }
-  
-  country
-}
+## Functions for efficiently reading in data to the workflow
 
 #' @title Get vector object
 #' @description
-#' A function to load and filter vector objects for a country polygon
+#' A function to load and filter vector objects to those intersecting
+#' a defined polygon
 #' 
-#' @usage get_vector(country_name, folder)
+#' @usage get_vector(folder, match, poly, ext)
 #' 
-#' @param country_name character.
 #' @param folder character. The name of the dataset folder.
+#' @param match character. A string to match in target filename(s)
+#' @param poly sf object. One or more polygons to filter the dataset.
+#' @param ext character. The target file extension
 #' 
 
-## TOO SLOW FOR VERY LARGE FILES - NEED TO FIND A WAY TO FILTER THEM BEFORE
-## READING IN! MAYBE A LOOKUP TABLE?
-
-get_vector <- function(folder, country_name = NULL, country_poly = NULL, suffix = ".shp") {
-  file_paths <- Sys.glob(paste0(folder, "/*.shp"))
+get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = ".shp") {
+  file_paths <- Sys.glob(paste0(folder, "/*", ext))
   
-  if (!is.null(country_name)) {
-    files <- file_paths[grepl(country_name, file_paths)]
+  if (!is.null(match)) {
+    match <- data_lookup[data_lookup$country == match,][[source]]
+    
+    files <- file_paths[str_detect(file_paths, match)]
   } else {
     files <- file_paths
   }
   
-  sf_list <- map(files, st_read)
+  sf_combined <- files %>%
+    map(st_read) %>%
+    bind_rows()
   
-  if(!is.null(country_poly)) {
+  if(!is.null(poly)) {
+    message("Filtering to those that intersect with polygon.")
+    poly_transform <- st_transform(poly, crs = st_crs(sf_combined))
     
-    poly_transform <- st_transform(country_poly, crs = st_crs(sf_list[[1]]))
-    
-    intersects <- sf_list %>%
-      map(st_bbox) %>%
-      map(st_as_sfc) %>%
-      map(st_intersects, y = poly_transform, sparse = FALSE) %>%
-      unlist()
-    
-    sf_list <- sf_list[intersects]
+    sf_combined <- st_filter(sf_combined, poly_transform)
   }
-  
-  sf_combined <- bind_rows(sf_list)
 
   sf_combined
     
 }
 
-#' @title Get prepared raster layer labeled by country 
+#' @title Read OSM road data
+#' @description 
+#' Reads in lines from an OSM PBF file and filters by default to "highways" objects
+#' 
+#' @usage get_osm(folder, match, type)
+#' 
+#' @param folder character. The name of the dataset folder
+#' @param match character. A string (e.g., country name) to match in the target file(s)
+#' @param layer character. The key to filter resulting data on
+
+get_osm <- function(proc_folder, raw_folder, match, source = "osm", type = "highway") {
+  
+  match <- data_lookup[data_lookup$country == match,][[source]]
+  
+  proc_files <- Sys.glob(paste0(proc_folder, "/*", match, "*.gpkg"))
+  
+  if (length(proc_files) == 0) {
+    
+    message("Processed GPKG not found. Converting from OSM PBF.")
+    raw_filepath <- Sys.glob(paste0(raw_folder, "/*", match, "*.pbf"))
+    dest_filepath <- paste0(proc_folder, "/osm_", match, ".gpkg")
+    gdal_utils("vectortranslate", raw_filepath, dest_filepath)
+    
+    lines <- st_read(dest_filepath, layer = "lines")
+    
+  } else {
+    
+    lines <- st_read(proc_files[1], layer = "lines")
+    
+  }
+  
+  output <- filter(lines, !is.na(.data[[type]]))
+    
+  output
+}
+
+
+#' @title Get prepared raster layer defined by a given match string
 #' @description 
 #' A function to load a complete raster with a country name from a filepath
 #' 
-#' @usage get_raster(country_name, folder, crs, path, agg, layer, type)
+#' @usage get_raster(folder, match, layer)
 #' 
-#' @param country_name character. The name of the target country
 #' @param folder character. The name of the dataset folder
+#' @param match character. A string (e.g., country name) to match in the target
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target raster
 
-get_raster <- function(folder, country = NULL, layer = NULL) {
-  file_path <- Sys.glob(paste0(folder, "/*", country, "*.tif*"))[1]
+get_raster <- function(folder, match = NULL, names = NULL, ext = ".tif", source = "gee") {
   
-  raster <- rast(file_path)
+  if (!is.null(match)) {
+    match <- data_lookup[data_lookup$country == match,][[source]]
+    file_paths <- Sys.glob(paste0(folder, "/*", match, "*", ext, "*"))
+    
+  } else {
+    file_paths <- Sys.glob(paste0(folder, "/*", ext, "*"))
+  }
   
-  if (!is.null(layer)) {
-    raster <- raster[[layer]]
+  raster <- rast(file_paths)
+  
+  if (!is.null(names)) {
+    names(raster) <- names
   }
   
   raster
@@ -102,9 +117,14 @@ get_raster <- function(folder, country = NULL, layer = NULL) {
 #' @param layer character or numeric. A vector of names or layer numbers to
 #' extract from the target rasters.
 
-get_tiled_raster <- function(folder, layer = NULL, names = NULL, crop = NULL) {
-  # Find raster tiles
-  file_paths <- Sys.glob(paste0(folder, "/*.tif"))
+get_tiled_raster <- function(folder, match = NULL, layer = NULL, names = NULL, ext = ".tif", source = "gee") {
+  
+  if (!is.null(match)) {
+    match <- data_lookup[data_lookup$country == match,][[source]]
+    file_paths <- Sys.glob(paste0(folder, "/*", match, "*", ext, "*"))
+  } else {
+    file_paths <- Sys.glob(paste0(folder, "/*", ext, "*"))
+  }
   
   # Create virtual raster
   vrt <- vrt(file_paths)
@@ -118,10 +138,6 @@ get_tiled_raster <- function(folder, layer = NULL, names = NULL, crop = NULL) {
     names(vrt) <- names
   }
   
-  if (!is.null(crop)) {
-    vrt <- crop(vrt, country)
-  }
-  
   # Return virtual raster dataset
   vrt
 }
@@ -133,25 +149,25 @@ get_tiled_raster <- function(folder, layer = NULL, names = NULL, crop = NULL) {
 #' 
 #' @usage get_stac_raster(country, collection, asset, folder)
 #' 
-#' @param country character. Country name.
 #' @param collection character. A STAC collection ID.
 #' @param asset character. The asset or band name(s) to retrieve.
+#' @param aoi sf object. Polygon(s) representing AOI.
+#' @param filename character. Filename to save to disk.
 #' @param folder character. Then name of the output folder in "data/raw/raster/"
 #' 
 
-get_stac_raster <- function(country, collection, asset, folder = NULL, crs = NULL) {
+get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY, folder = NULL, names = NULL) {
   
   if(is.null(folder)) {
     folder <- collection
   }
   
-  filepath <- paste0("data/raw/raster/", folder, "/", country, ".tif")
+  filepath <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
 
   if (!file.exists(filepath)) {
     message("File not detected. Downloading from STAC.")
-    country_sf <- get_country(country, crs = crs)
     filepath <- rsi::get_stac_data(
-      aoi = country_sf,
+      aoi = aoi,
       start_date = "2000-01-01",  end_date = "2024-01-01",
       asset_names = asset,
       collection = collection,
@@ -159,53 +175,14 @@ get_stac_raster <- function(country, collection, asset, folder = NULL, crs = NUL
       output_filename = filepath,
     )
   } else {
-    message("File detected. Loading from disc.")
+    message("File detected. Loading from disk.")
   }
   
-  rast(filepath)
-}
-
-#' @title Read Renoster polygons
-#' @description
-#' A function to read in, clean and fix geometries of REDD project boundaries
-#' held in .gpkg format in the Renoster dataset (Karnik et al., pp)
-#' 
-#' @usage read_renoster(path, skip = NULL)
-#' 
-#' @param path string. A filepath to the data file.
-#' @param skip (optional) string. A vector of project codes to skip (e.g., if they contain
-#' unfixable geometries). Codes should be in the format "XXX123", e.g., "VCS381".
-
-read_renoster <- function(filepath, skip = NULL) {
-  st_read(filepath) %>%
-    select(ProjectID, geom) %>%
-    filter(st_is(geom, "MULTIPOLYGON")) %>%
-    filter(!(ProjectID %in% skip)) %>%
-    st_make_valid() %>%
-    st_collection_extract()
-}
-
-#' @title Read KML files
-#' @description
-#' A function to read in, clean and fix geometries of project boundaries stored
-#' in .kml formats (e.g., the Verra dataset). Files with no layers or other
-#' errors will be silently skipped. Files with multiple layers will have all
-#' layers read in and combined into a single sf object.
-#' 
-#' @usage read_kml(path)
-#' 
-#' @param path string. A filepath to the data file.
-
-read_kml <- function(filepath) {
+  raster <- rast(filepath)
   
-  layer_names <- possibly(st_layers)(filepath)$name
-  
-  st_read2 <- possibly(st_read)
-  
-  if(!is.null(layer_names)) {
-    layers <- map(layer_names, function(name) st_read2(filepath, layer = name, quiet = TRUE))
-    layers <- bind_rows(layers)
-    
-    layers
+  if (!is.null(names)) {
+    names(raster) <- names
   }
+  
+  raster
 }
