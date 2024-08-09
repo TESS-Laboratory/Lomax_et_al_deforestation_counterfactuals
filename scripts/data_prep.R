@@ -12,7 +12,7 @@ START_YEAR <- 2016  # Simulated start year of protection project
 
 # Polygon sampling
 COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when generating polygons (km)
-POLY_SIZE <- 600000 # size of polygons in hectares
+POLY_SIZE <- 60000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
 POLY_BUFFER_RATIO <- 1 # polygon buffer area as ratio of polygon area
 SAMPLE_N <- 25  # number of polygons to sample per stratum
