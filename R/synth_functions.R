@@ -1,4 +1,21 @@
-## Functions for conducting synthetic control analysis on prepared data
+## Functions for preparing data and conducting synthetic control analysis
+
+#' @title Wide to long
+#' @description Converts wide-form data to long-form by year
+#' 
+#' @usage wide_to_long(df)
+#' 
+#' @param df wide-format data frame
+
+wide_to_long <- function(df) {
+  df_long <- df %>%
+    pivot_longer(cols = contains(".")) %>%
+    separate_wider_delim(cols = "name", delim = ".", names = c("var", "year")) %>%
+    pivot_wider(names_from = "var", values_from = "value")
+  
+  df_long
+}
+
 
 #' @title Set treated
 #' @description Adds a column to a data frame denoting the polygon ID that 
@@ -33,7 +50,8 @@ add_dist_to_treated <- function(sf, treated_id) {
   
   distances <- st_distance(centroids, centroids_treated) %>%
     set_units("km") %>%
-    drop_units
+    drop_units() %>%
+    as.vector()
   
   df_with_dist <- sf %>%
     mutate(dist_to_treated = distances) %>%
@@ -100,5 +118,121 @@ add_biome_match <- function(df, treated_id) {
   
   df_biome_shared <- left_join(df, biome_shared)
   
-  df_biomed_shared
+  df_biome_shared
+}
+
+#' @title Get formula
+#' @description Retrieves appropriate simulation formula for a numeric simulation
+#' number (1-5)
+#' 
+#' @usage get_formula(sim)
+#' 
+#' @param sim numeric. The simulation number
+
+get_formula <- function(sim) {
+  if (sim == 1) {
+    augsynth_formula <- "loss ~ treated"
+  } else if (sim %in% c(2, 3)) {
+    augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
+                            precipitation + temperature_2m + elevation + slope + ag_suitability +
+                            dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
+                            protected_frac + pop_density + dist_to_edge"
+  } else if (sim == 4) {
+    augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
+                            precipitation + temperature_2m + elevation + slope + ag_suitability +
+                            dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
+                            protected_frac + pop_density + dist_to_edge +
+                            dist_to_treated"
+  } else if (sim == 5) {
+    augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
+                            precipitation + temperature_2m + elevation + slope + ag_suitability +
+                            dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
+                            protected_frac + pop_density + dist_to_edge +
+                            dist_to_treated +
+                            eco_frac_shared"
+  } else {
+    stop("Not a valid simulation. Must be an integer between 1 and 5.")
+  }
+  
+  formula(augsynth_formula)
+}
+
+#' @title Run synthetic control
+#' @description Helper function to run augmented synthetic control algorithm
+#' with specified default settings based on the simulation number provided
+#' 
+#' @usage run_synthetic_control(sim, data)
+#' 
+#' @param sim integer. The desired simulation number
+#' @param data a data.frame containing input data
+
+run_synthetic_control <- function(sim, data) {
+  
+  formula <- get_formula(sim)
+  
+  synth <- augsynth(
+    form = formula,
+    unit = ID,
+    time = year,
+    data = data,
+    progfunc = "Ridge",
+    scm = TRUE
+  )
+  
+  synth
+  
+}
+
+
+ 
+#' @title Extract synth error
+#' @description Extracts a time series or average value of the absolute error
+#' (equivalent to the absolute average treatment effect on the treated) from
+#' an augsynth object.
+#' 
+#' @usage extract_synth_error(synth, ts = FALSE)
+#' 
+#' @param synth an augsynth object
+#' @param ts logical. Should the function return a time series of annual error
+#' values rather than the default single mean absolute error in the
+#' post-intervention period?
+
+extract_synth_error <- function(synth, ts = FALSE) {
+  att_df <- summary(synth)$att
+  
+  intervention_year <- synth$t_int
+  
+  att_post_intervention <- filter(att_df, Time >= intervention_year)
+  
+  att_abs <- abs(att_post_intervention$Estimate)
+  
+  if (ts == TRUE) {
+    att_abs
+  } else {
+    mean(att_abs)
+  }
+}
+
+#' @title Extract synth
+#' @description Unpacks a synth object into a data frame of 
+#' 
+#' @usage extract_synth(synth, id)
+#' 
+#' @param synth an augsynth object
+#' @param id numeric. The polygon ID of the treated unit for a given synth
+
+extract_synth <- function(synth, id) {
+  
+  start_year <- synth$data$time %>%
+    as.numeric() %>%
+    min()
+  
+  results_df <- grid_data %>%
+    st_drop_geometry() %>%
+    wide_to_long() %>%
+    filter(ID == id & year >= start_year) %>%
+    select(year, loss) %>%
+    mutate(sc_loss = predict(synth))
+  
+  results_df
 }
