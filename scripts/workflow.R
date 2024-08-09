@@ -6,13 +6,13 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Spatial and temporal range
-COUNTRY <- "Colombia"  # Target country
+COUNTRY <- "Cote d'Ivoire"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
 
 # Polygon sampling
 COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when generating polygons (km)
-POLY_SIZE <- 59000 # size of polygons in hectares
+POLY_SIZE <- 600000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
 POLY_BUFFER_RATIO <- 1 # polygon buffer area as ratio of polygon area
 SAMPLE_N <- 25  # number of polygons to sample per stratum
@@ -23,7 +23,6 @@ FC_THRESHOLD <- 20  # Minimum forest cover to include polygons in sample (%)
 FOREST_EDGE_AREA <- 10 # Minimum continuous nonforest area to define as forest edge, hectares
 
 # Data processing
-OUTPUT_PATH <- "data/processed/vector/sample_polygons"  # Output directory
 SEED <- 111  # Random number seed
 AGG <- 3  # Factor to aggregate rasters to speed data processing
 
@@ -46,8 +45,8 @@ econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
   filter(year >= 1991 & year <= START_YEAR)
 
 # Raster data
-fc <- get_tiled_raster("data/raw/raster/tmf", match = COUNTRY, names = paste0("fc.", 1990:2022))
-fc_loss <- get_tiled_raster("data/raw/raster/tmf_loss/", match = COUNTRY, names = paste0("loss.", 1991:2022))
+fc <- get_tiled_raster("data/raw/raster/tmf", match = COUNTRY, names = paste0("fc.", 1990:2023))
+fc_loss <- get_tiled_raster("data/raw/raster/tmf_loss/", match = COUNTRY, names = paste0("loss.", 1991:2023))
 biomass <- get_stac_raster(collection = "hgb", asset = "aboveground", names = "biomass")
 cropland <- get_tiled_raster("data/raw/raster/cropland", match = COUNTRY, names = "cropland")
 dem <- get_stac_raster(
@@ -80,7 +79,7 @@ protected_areas <- get_vector("data/raw/vector/protected_areas", match = COUNTRY
   st_transform(CRS)
 redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
   filter(Country == COUNTRY) %>%
-  st_transform(CRS)
+  st_transform(CRS) 
 
 ### 3. Generate polygon grids and buffers --------
 
@@ -206,7 +205,6 @@ grid_pa_intersection <- grid_threshold %>%
   mutate(poly_area = st_area(x)) %>%
   st_intersection(st_union(st_collection_extract(protected_areas))) %>%
   mutate(int_area = st_area(x))
-toc()
 
 # Calculate area of forest in PAs as frac of total forest in polygon
 grid_pa_intersection_fc <- grid_pa_intersection %>%
