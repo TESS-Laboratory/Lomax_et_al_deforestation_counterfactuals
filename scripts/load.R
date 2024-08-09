@@ -22,6 +22,8 @@ reload <- function() {
     tempdir = "data/processed/tmp"
   )
   
+  options(scipen = 999)
+  
 }
 
 reload()
