@@ -6,7 +6,7 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Spatial and temporal range
-COUNTRY <- "Cote d'Ivoire"  # Target country
+COUNTRY <- "Brazil"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
 
@@ -24,9 +24,11 @@ FOREST_EDGE_AREA <- 10 # Minimum continuous nonforest area to define as forest e
 
 # Data processing
 SEED <- 111  # Random number seed
-AGG <- 3  # Factor to aggregate rasters to speed data processing
+AGG <- 5  # Factor to aggregate rasters to speed data processing
 
 ### 2. Load datasets --------
+
+print("Loading input data...")
 
 # Lookup table for efficient data I/O
 data_lookup <- read_csv("data/raw/csv/data_lookup.csv")  # TO COMPLETE
@@ -39,21 +41,26 @@ country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>%
   st_as_sf() %>%
   st_transform(CRS) %>%
   select(NAME_1, GID_1, geometry)
+country_grid <- st_make_grid(country, n = 6) %>%
+  map(st_sfc, crs = st_crs(country))
 econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
   filter(country == COUNTRY) %>%
   select(region, year, grp_pc_usd_2015, ag_grp_pc_usd_2015) %>%
   filter(year >= 1991 & year <= START_YEAR)
 
 # Raster data
-fc <- get_tiled_raster("data/raw/raster/tmf", match = COUNTRY, names = paste0("fc.", 1990:2023))
+fc <- get_tiled_raster("data/raw/raster/tmf_binary", match = COUNTRY, names = paste0("fc.", 1990:2023))
 fc_loss <- get_tiled_raster("data/raw/raster/tmf_loss/", match = COUNTRY, names = paste0("loss.", 1991:2023))
+fc_loss_agg <- get_tiled_raster("data/raw/raster/tmf_loss_agg", match = COUNTRY, names = paste0("loss.", 1991:2023))
 biomass <- get_stac_raster(collection = "hgb", asset = "aboveground", names = "biomass")
 cropland <- get_tiled_raster("data/raw/raster/cropland", match = COUNTRY, names = "cropland")
 dem <- get_stac_raster(
   collection = "cop-dem-glo-90",
   asset = "data",
   folder = "dem",
-  names = "elevation")
+  names = "elevation",
+  tile = 6
+)
 ppt <- get_raster("data/raw/raster/chirps", COUNTRY)
 tMean <- get_raster("data/raw/raster/era5", COUNTRY)
 ag_suitability <- get_raster(
@@ -81,55 +88,21 @@ redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
   filter(Country == COUNTRY) %>%
   st_transform(CRS) 
 
-### 3. Generate polygon grids and buffers --------
+print("Input data loaded.")
 
-grid <- generate_polygons(
-  country,
-  buffer = COUNTRY_BUFFER,
-  shape = POLY_SHAPE,
-  area = POLY_SIZE,
-  crs = CRS
-)
+### 3. Process data for polygon extraction
 
-# Generate hexagonal buffers of POLY_BUFFER_RATIO * POLY_SIZE area
+print("Processing input data...")
 
-grid_buffer <- generate_buffers(
-  grid,
-  area_ratio = POLY_BUFFER_RATIO,
-  buffer_only = TRUE,
-  joinStyle = "MITRE")
+## (a) Forest cover in start years 
 
-### 4. Filter to polygons meeting selection criteria --------
-
-# Remove polygons intersecting REDD projects or protected areas designated since 1990.
-protected_areas_new <- filter(protected_areas, STATUS_YR >= 1991)
-
-grid_filtered <- grid %>%
-  filter_disjoint(redd_projects) %>%
-  filter_disjoint(protected_areas_new)
-
-# Remove polygons with < 20% forest cover in 1990
-
-fc_1990 <- subset(fc, "fc.1990") %in% c(1, 2, 4)  # Undisturbed, degraded or regrowth forest
+fc_1990 <- subset(fc, "fc.1990")  
 names(fc_1990) <- "fc_1990"
 
-grid_threshold <- grid_filtered %>%
-  poly_extract(fc_1990) %>%
-  filter(fc_1990 >= FC_THRESHOLD / 100) %>%
-  select(-fc_1990)
-
-grid_buffer_threshold <- grid_buffer %>%
-  filter(ID %in% grid_threshold$ID)
-
-### 5. Prepare additional data layers for extract --------
-## (i) Forest cover in start year
-
-tic()
-fc_start <- subset(fc, str_which(names(fc), as.character(START_YEAR))) %in% c(1, 2, 4)
+fc_start <- subset(fc, str_which(names(fc), as.character(START_YEAR)))
 names(fc_start) <- "fc_start"
-toc()
 
-## (ii) Pixelwise distance to forest edge in start year
+## (b) Pixelwise distance to forest edge in start year
 
 # Convert to equal area projection and aggregate
 fc_start_agg <- aggregate(fc_start, fact = AGG, fun = "modal")
@@ -164,18 +137,33 @@ toc()
 
 names(dist_to_edge) <- "dist_to_edge"
 
-## (iii) Calculate slope from DEM
+## (c) Calculate slope from DEM
 
 slope <- terrain(dem)
 
-## (iv) Mask relevant raster layers to forest area in project start year (~40min for Colombia)
+## (d) Mask relevant raster layers to forest area in project start year
 forest_vars <- list(biomass, dem, slope, ag_suitability, dist_to_edge) %>%
   mask_to_forest(fc_start_agg, combine = TRUE)
 
-## (v) Jurisdiction-level annual forest cover loss (polygons with annual loss columns)
-## and economic variables
+## (e) Jurisdiction-level forest loss and economic variables
 
-fc_loss_agg <- aggregate(fc_loss, fact = AGG, fun = "mean")
+# Aggregate forest loss raster to reduce computation time
+# pre_start_indices <- 1:(str_which(names(fc), as.character(START_YEAR)))
+# tic()
+# fc_loss_agg <- map(pre_start_indices, function(i) {
+#   
+#   message("Aggregating layer: ", i)
+#   out <- fc_loss %>%
+#   subset(i) %>%
+#   aggregate(fact = AGG, fun = "mean")
+#   
+#   out
+# }) %>% rast()
+# toc()
+
+# Extract fractional forest loss by jurisdiction
+
+fc_loss_agg <- subset(fc_loss_agg, 1:(str_which(names(fc), as.character(START_YEAR))))
 
 country_adm1_vars <- country_adm1 %>%
   poly_extract(fc_loss_agg, id_col = "NAME_1", col_prefix = "jurisdiction_") %>%
@@ -183,28 +171,101 @@ country_adm1_vars <- country_adm1 %>%
   mutate(across(starts_with("jurisdiction"), .fns = ~ .x / fc_1990)) %>%
   select(-fc_1990)
 
+# Extract jurisdication-level economic variables (if present)
+
 if(nrow(econ_vars) > 0) {
   econ_vars_wide <- econ_vars %>%
     mutate(ag_grp_frac = ag_grp_pc_usd_2015 / grp_pc_usd_2015) %>%
     select(-ag_grp_pc_usd_2015) %>%
     pivot_wider(names_from = year, values_from = contains("grp"))
-
+  
   country_adm1_vars <- left_join(country_adm1_vars, econ_vars_wide, by = c("NAME_1" = "region"))
 }
+
+## (f) Calculate distance from nearest river and road
+
+# Rasterize datasets
+tic(); rivers_rast <- rasterize_lines(rivers, fc_start_ea); toc()
+tic(); roads_rast_grip <- rasterize_lines(roads_grip, fc_start_ea); toc()
+tic(); roads_rast_osm <- rasterize_lines(roads_osm, fc_start_ea); toc()
+
+roads_rast_all <- max(c(roads_rast_grip, roads_rast_osm))
+
+# Calculate distance rasters
+tic()
+dist_to_river <- distance(rivers_rast)
+names(dist_to_river) <- "dist_to_river"
+toc()
+tic()
+dist_to_road <- distance(roads_rast_all)
+names(dist_to_road) <- "dist_to_road"
+toc()
+
+print("Raster processing complete.")
+
+### 4. Generate polygon grids and buffers --------
+print("Generating polygon grids...")
+
+grid <- generate_polygons(
+  country,
+  buffer = COUNTRY_BUFFER,
+  shape = POLY_SHAPE,
+  area = POLY_SIZE,
+  crs = CRS
+)
+
+# Generate hexagonal buffers of POLY_BUFFER_RATIO * POLY_SIZE area
+
+grid_buffer <- generate_buffers(
+  grid,
+  area_ratio = POLY_BUFFER_RATIO,
+  buffer_only = TRUE,
+  joinStyle = "MITRE")
+
+### 5. Filter to polygons meeting selection criteria --------
+
+# Remove polygons intersecting REDD projects or protected areas designated since 1990.
+protected_areas_new <- filter(protected_areas, STATUS_YR >= 1991)
+
+grid_filtered <- grid %>%
+  filter_disjoint(redd_projects) %>%
+  filter_disjoint(protected_areas_new)
+
+# Remove polygons with < 20% forest cover in 1990
+
+grid_threshold <- grid_filtered %>%
+  poly_extract(fc_1990) %>%
+  filter(fc_1990 >= FC_THRESHOLD / 100) %>%
+  select(-fc_1990)
+
+grid_buffer_threshold <- grid_buffer %>%
+  filter(ID %in% grid_threshold$ID)
+
+print("Grid processing complete")
+
+### 6. Extracting vector data for grid --------
+
+print("Extracting data for polygon grid...")
+
+## (a) Average jurisdiction-level variables
 
 grid_adm1_intersection <- grid_threshold %>%
   calc_intersection(country_adm1_vars, frac_col = "jurisdiction_frac") %>%
   group_by(ID) %>%
   summarise(across(.cols = starts_with("jurisdiction_loss"), .fns = ~ sum(.x * jurisdiction_frac)))
 
-## (vi) Forest fraction in protected areas
+## (b) Forest fraction in protected areas
 
 # Find intersection of start year forest area in polygons with PAs
 grid_pa_intersection <- grid_threshold %>%
   poly_extract(fc_start_agg) %>%
   mutate(poly_area = st_area(x)) %>%
-  st_intersection(st_union(st_collection_extract(protected_areas))) %>%
-  mutate(int_area = st_area(x))
+  st_intersection(protected_areas) %>%
+  mutate(int_area = st_area(x)) %>%
+  group_by(ID) %>%
+  summarise(fc_start = mean(fc_start),
+            poly_area = first(poly_area),
+            int_area = sum(int_area))
 
 # Calculate area of forest in PAs as frac of total forest in polygon
 grid_pa_intersection_fc <- grid_pa_intersection %>%
@@ -219,32 +280,14 @@ grid_pa_frac <- grid_pa_intersection_fc %>%
   select(ID, protected_frac) %>%
   replace_na(list("protected_frac" = 0))
 
-## (vii) Calculate fractional polygon overlap with ecoregion boundaries
+## (c) Fractional polygon overlap with ecoregion boundaries
 
 grid_ecoregion_intersection <- grid_threshold %>%
   calc_intersection(ecoregions, frac_col = "eco_frac") %>%
   group_by(ID) %>%
   nest(.key = "eco_frac")
 
-## (viii) Calculate distance from nearest river and road
-
-# Rasterize datasets
-tic(); rivers_rast <- rasterize_lines(rivers, fc_start_ea); toc()
-tic(); roads_rast_grip <- rasterize_lines(roads_grip, fc_start_ea); toc()
-tic(); roads_rast_osm <- rasterize_lines(roads_osm, fc_start_ea); toc()
-
-roads_rast_all <- max(c(roads_rast_grip, roads_rast_osm))
-
-# Calculate distance rasters
-tic()
-dist_to_river <- distance(rivers_rast)
-names(dist_to_river) <- "dist_to_river"
-toc()
-dist_to_road <- distance(roads_rast_all)
-names(dist_to_road) <- "dist_to_road"
-toc()
-
-### 6. Extract variables for grid and buffer polygons --------
+### 7. Extract all variables for grid and buffer polygons --------
 
 ## Extract raster variables for polygons and buffers
 raster_vars <- list(fc_start, fc_loss, forest_vars, ppt, tMean, dist_to_river,
@@ -257,9 +300,7 @@ grid_fc_buffer_vars <- grid_buffer_threshold %>%
   extract_from_list(buffer_raster_vars, col_prefix = "buffer_") %>%
   st_drop_geometry()
 
-## Join with vector variables and create merged wide-format data frame 
-##### !! Issue - where a polygon intersects multiple adm1 or ecoregions, its row is duplicated
-##### Need a better way to summarise and retain data where multiple intersections exist before merging.
+## Join with vector variables and create merged wide-format data frame
 all_vars <- list(grid_fc_raster_vars, grid_fc_buffer_vars, grid_adm1_intersection, grid_ecoregion_intersection, grid_pa_frac)
 
 grid_fc_all_vars <- all_vars %>%
@@ -267,16 +308,7 @@ grid_fc_all_vars <- all_vars %>%
   mutate(cropland = (cropland + POLY_BUFFER_RATIO * buffer_cropland) / (1 + POLY_BUFFER_RATIO)) %>%
   select(-buffer_cropland)
 
-## Pull geometry into separate object and convert to long-format df
-
-# grid_geoms <- select(grid_fc_all_vars, ID, x)
-# grid_vars_long <- grid_fc_all_vars %>%
-#   st_drop_geometry() %>%
-#   pivot_longer(cols = contains(".")) %>%
-#   separate_wider_delim(cols = "name", delim = ".", names = c("var", "year")) %>%
-#   pivot_wider(names_from = "var", values_from = "value")
-
-### 7. Take stratified sample of polygons by actual cumulative deforestation after start year --------
+### 8. Take stratified sample of polygons by actual cumulative deforestation after start year --------
 # TO DO: REWRITE OR REPACKAGE IN FUNCTION
 
 grid_loss_strata <- grid_fc_all_vars %>%
@@ -290,9 +322,7 @@ grid_loss_strata <- grid_fc_all_vars %>%
   summarise(cum_loss = sum(loss)) %>%
   mutate(stratum = cut_interval(cum_loss, n = SAMPLE_STRATA, labels = FALSE))
 
-# Sample either 25 per group or the smallest available group size
-
-# sample_n <- min(c(25, count(grid_loss_strata, stratum)$n))
+# Sample up to 25 per group
 
 set.seed(SEED)
 grid_sample_ids <- slice_sample(grid_loss_strata, n = SAMPLE_N, by = stratum)
