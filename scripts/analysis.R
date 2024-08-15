@@ -9,10 +9,8 @@ source("scripts/load.R")
 COUNTRY <- "Cote d'Ivoire"  # Target country
 START_YEAR <- 2016  # Simulated start year of protection project
 MATCHING_PERIOD <- 16  # Length of pre-intervention period to use for matching (years)
-POLY_SIZE <- 59000 # size of polygons in hectares
-
-# Simulation run
-SIMULATIONS <- 1:6
+POLY_SIZE <- 60000 # size of polygons in hectares
+SIMULATIONS <- c(1,2,3,4,5)
 
 ### 2. Load data
 ## To fix tomorrow - now have the geoms attached to grid_data, which is in wide format
@@ -53,7 +51,7 @@ sc_results <- map(sample_ids$ID, function(id) {
     ID = id,
     stratum = sample_ids$stratum[sample_ids$ID == id],
     sim = SIMULATIONS) %>%
-    mutate(synth = map(sim, run_synthetic_control, data = grid_data_prepared, pt = MATCHING_PERIOD))
+    mutate(synth = map(sim, run_synthetic_control, data = grid_data_prepared))
 
   sim_df
 })
@@ -63,44 +61,44 @@ sc_results <- map(sample_ids$ID, function(id) {
 
 # Convert back to time series of observed and modelled forest loss for each unit
 
-tic()
 sc_df <- sc_results %>%
   bind_rows() %>%
   mutate(sc_results = map2(synth, ID, extract_synth)) %>%
   select(-synth) %>%
   unnest(sc_results)
-toc()
 
 set.seed(111)
-viz_ids <- sample(sample_ids$ID, 16)
+viz_ids <- sample(sample_ids$ID, 4)
 
 ts_plots <- sc_df %>%
-  filter(ID %in% viz_ids) %>%
+  # filter(ID %in% viz_ids) %>%
   filter(sim %in% c(1, 5)) %>%
   ggplot(aes(x = as.numeric(year))) +
-  geom_line(aes(y = loss)) +
+  geom_line(aes(y = loss, colour = "Observed"), lwd = 0.9) +
   geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
   geom_vline(xintercept = START_YEAR) +
   facet_wrap(~ID) +
   theme_bw() +
   labs(x = "Year", y = "Annual loss rate (area frac)", colour = NULL) +
-  scale_colour_discrete(labels = c("Prior outcomes only", "All covariates"))
+  scale_colour_manual(
+    labels = c("Prior outcomes only (S1)", "All covariates (S5)", "Observed"),
+    values = c("#fb8072", "#b3de69", "black"))
 
-ts_plots_post <- sc_df %>%
-  filter(ID %in% viz_ids) %>%
-  filter(sim %in% c(1, 5)) %>%
-  filter(year >= START_YEAR) %>%
-  ggplot(aes(x = as.numeric(year))) +
-  geom_line(aes(y = loss)) +
-  geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
-  geom_vline(xintercept = START_YEAR) +
-  facet_wrap(~ID) +
-  theme_bw() +
-  labs(x = "Year", y = "Annual loss rate (area frac)", colour = NULL) +
-  scale_colour_discrete(labels = c("Prior outcomes only", "All covariates"))
+# ts_plots_post <- sc_df %>%
+#   # filter(ID %in% viz_ids) %>%
+#   filter(sim %in% c(1, 5)) %>%
+#   filter(year >= START_YEAR) %>%
+#   ggplot(aes(x = as.numeric(year))) +
+#   geom_line(aes(y = loss)) +
+#   geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
+#   geom_vline(xintercept = START_YEAR) +
+#   facet_wrap(~ID) +
+#   theme_bw() +
+#   labs(x = "Year", y = "Annual loss rate (area frac)", colour = NULL) +
+#   scale_colour_discrete(labels = c("Prior outcomes only", "All covariates"))
 
 ggsave(
-  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_S", SIMULATION, "_ts_plots.jpg"),
+  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_ts_plots.jpg"),
   ts_plots,
   width = 24, height = 20, dpi = 300, units = "cm"
 )
@@ -126,7 +124,11 @@ mae_plot <- sc_mae %>%
   theme_bw() +
   labs(x = "Simulation", y = "Mean absolute error\n(annual loss rate)")
 
-
+ggsave(
+  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_mae_plots.jpg"),
+  mae_plot,
+  width = 20, height = 16, dpi = 300, units = "cm"
+)
 
 # observed_loss <- grid_data %>%
 #   wide_to_long() %>%
