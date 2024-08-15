@@ -143,7 +143,7 @@ get_formula <- function(sim) {
                             dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
                             protected_frac + pop_density + dist_to_edge +
                             dist_to_treated"
-  } else if (sim == 5) {
+  } else if (sim %in% c(5, 6)) {
     augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
                             precipitation + temperature_2m + elevation + slope + ag_suitability +
                             dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
@@ -151,11 +151,35 @@ get_formula <- function(sim) {
                             dist_to_treated +
                             eco_frac_shared"
   } else {
-    stop("Not a valid simulation. Must be an integer between 1 and 5.")
+    stop("Not a valid simulation. Must be an integer between 1 and 6.")
   }
   
   formula(augsynth_formula)
 }
+
+#' @title Prepare outcome data
+#' @description Adjusts the pre-intervention outcome data according to the simulation
+#' selected. For simulations that do not use the full set of pre-intervention outcomes,
+#' these will be replaced by the mean value (for S2, S4 and S5) or by zeros (S3).
+#' 
+#' @usage prepare_outcomes(sim, outcome_ts, pt)
+#' 
+#' @param sim integer. The desired simulation number
+#' @param outcome_ts numeric. A vector or column name containing the outcomes
+#' @param pt numeric. The number of pre-treatment periods before project start
+
+prepare_outcomes <- function(sim, outcome_ts, pt) {
+  
+  if (sim == 3) {
+    outcome_ts[1:pt] <- 0
+  } else if (sim %in% c(2, 4, 5)) {
+    outcome_ts[pt] <- mean(outcome_ts[1:pt])
+    outcome_ts[1:(pt-1)] <- 0
+  }
+  
+  outcome_ts
+}
+
 
 #' @title Run synthetic control
 #' @description Helper function to run augmented synthetic control algorithm
@@ -165,25 +189,27 @@ get_formula <- function(sim) {
 #' 
 #' @param sim integer. The desired simulation number
 #' @param data a data.frame containing input data
+#' @param out_model character. The outcome model to use (see `augsynth` function)
+#' @param ... Other arguments to pass to prepare_outcomes()
 
-run_synthetic_control <- function(sim, data) {
+run_synthetic_control <- function(sim, data, out_model = "Ridge", ...) {
   
   formula <- get_formula(sim)
+  
+  data <- mutate(data, loss = prepare_outcomes(sim, loss, ...))
   
   synth <- augsynth(
     form = formula,
     unit = ID,
     time = year,
     data = data,
-    progfunc = "Ridge",
+    progfunc = out_model,
     scm = TRUE
   )
   
   synth
   
 }
-
-
  
 #' @title Extract synth error
 #' @description Extracts a time series or average value of the absolute error

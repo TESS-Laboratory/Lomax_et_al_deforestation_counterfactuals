@@ -12,7 +12,7 @@ MATCHING_PERIOD <- 16  # Length of pre-intervention period to use for matching (
 POLY_SIZE <- 59000 # size of polygons in hectares
 
 # Simulation run
-SIMULATION <- 5
+SIMULATIONS <- 1:6
 
 ### 2. Load data
 ## To fix tomorrow - now have the geoms attached to grid_data, which is in wide format
@@ -52,8 +52,8 @@ sc_results <- map(sample_ids$ID, function(id) {
   sim_df <- tibble(
     ID = id,
     stratum = sample_ids$stratum[sample_ids$ID == id],
-    sim = 1:5) %>%
-    mutate(synth = map(sim, run_synthetic_control, data = grid_data_prepared))
+    sim = SIMULATIONS) %>%
+    mutate(synth = map(sim, run_synthetic_control, data = grid_data_prepared, pt = MATCHING_PERIOD))
 
   sim_df
 })
@@ -113,20 +113,35 @@ sc_mae <- sc_df %>%
   group_by(ID, sim, test_period) %>%
   summarise(mae = mean(abs_error))
 
-observed_loss <- grid_data %>%
-  wide_to_long() %>%
-  filter(year > START_YEAR) %>%
-  group_by(ID) %>%
-  summarise(mean_loss = mean(loss))
+test_period_lookup <- tibble(
+  test_period = c(TRUE, FALSE),
+  label = c("Test period", "Matching period")
+)
 
-sc_mae_frac <- sc_mae %>%
-  left_join(observed_loss) %>%
-  mutate(mae_frac = mae / mean_loss)
-
-ggplot(sc_mae_frac, aes(x = mean_loss, y = mae, colour = as.factor(stratum))) +
-  geom_point() +
-  geom_abline(slope = 1, intercept = 0, colour = "grey20") +
+mae_plot <- sc_mae %>%
+  left_join(test_period_lookup) %>%
+  ggplot(aes(x = as.factor(sim), y = mae, fill = as.factor(sim))) +
+  geom_boxplot(alpha = 0.25, show.legend = FALSE) +
+  facet_wrap(~label) +
   theme_bw() +
-  labs(x = "Observed mean forest loss in test period",
-       y = "Mean absolute error of synthetic\ncontrol in test period",
-       colour = "Forest loss stratum")
+  labs(x = "Simulation", y = "Mean absolute error\n(annual loss rate)")
+
+
+
+# observed_loss <- grid_data %>%
+#   wide_to_long() %>%
+#   filter(year > START_YEAR) %>%
+#   group_by(ID) %>%
+#   summarise(mean_loss = mean(loss))
+# 
+# sc_mae_frac <- sc_mae %>%
+#   left_join(observed_loss) %>%
+#   mutate(mae_frac = mae / mean_loss)
+# 
+# ggplot(sc_mae_frac, aes(x = mean_loss, y = mae, colour = as.factor(stratum))) +
+#   geom_point() +
+#   geom_abline(slope = 1, intercept = 0, colour = "grey20") +
+#   theme_bw() +
+#   labs(x = "Observed mean forest loss in test period",
+#        y = "Mean absolute error of synthetic\ncontrol in test period",
+#        colour = "Forest loss stratum")
