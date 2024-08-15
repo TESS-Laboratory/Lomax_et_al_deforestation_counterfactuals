@@ -50,6 +50,7 @@ econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
 
 # Raster data
 fc <- get_tiled_raster("data/raw/raster/tmf_binary", match = COUNTRY, names = paste0("fc.", 1990:2023))
+fc_agg <- get_tiled_raster("data/raw/raster/tmf_binary_agg", match = COUNTRY, names = paste0("fc.", 1990:2023))
 fc_loss <- get_tiled_raster("data/raw/raster/tmf_loss/", match = COUNTRY, names = paste0("loss.", 1991:2023))
 fc_loss_agg <- get_tiled_raster("data/raw/raster/tmf_loss_agg", match = COUNTRY, names = paste0("loss.", 1991:2023))
 biomass <- get_stac_raster(collection = "hgb", asset = "aboveground", names = "biomass")
@@ -96,7 +97,7 @@ print("Processing input data...")
 
 ## (a) Forest cover in start years 
 
-fc_1990 <- subset(fc, "fc.1990")  
+fc_1990 <- subset(fc, "fc.1990")
 names(fc_1990) <- "fc_1990"
 
 fc_start <- subset(fc, str_which(names(fc), as.character(START_YEAR)))
@@ -164,10 +165,13 @@ forest_vars <- list(biomass, dem, slope, ag_suitability, dist_to_edge) %>%
 # Extract fractional forest loss by jurisdiction
 
 fc_loss_agg <- subset(fc_loss_agg, 1:(str_which(names(fc), as.character(START_YEAR))))
+# fc_1990_agg <- aggregate(fc_1990, fact = AGG, fun = "mean")
+fc_1990_agg <- subset(fc_binary_agg, "fc.1990")
+names(fc_1990_agg) <- "fc_1990"
 
 country_adm1_vars <- country_adm1 %>%
   poly_extract(fc_loss_agg, id_col = "NAME_1", col_prefix = "jurisdiction_") %>%
-  poly_extract(fc_1990, id_col = "NAME_1") %>%
+  poly_extract(fc_1990_agg, id_col = "NAME_1") %>%
   mutate(across(starts_with("jurisdiction"), .fns = ~ .x / fc_1990)) %>%
   select(-fc_1990)
 
