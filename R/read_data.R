@@ -34,6 +34,11 @@ get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = 
     
     sf_combined <- st_filter(sf_combined, poly_transform)
   }
+  
+  if(sum(st_is(st_geometry(sf_combined), "GEOMETRYCOLLECTION")) > 0) {
+    message("Unpacking geometry collections")
+    sf_combined <- st_collection_extract(sf_combined)
+  }
 
   sf_combined
     
@@ -156,29 +161,50 @@ get_tiled_raster <- function(folder, match = NULL, layer = NULL, names = NULL, e
 #' @param folder character. Then name of the output folder in "data/raw/raster/"
 #' 
 
-get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY, folder = NULL, names = NULL) {
+get_stac_raster <- function(aoi = country, filename = COUNTRY, collection, asset, folder = NULL, names = NULL, tile = NULL) {
+  
+  if (!is.null(tile)) {
+    aoi_grid <- aoi %>%
+      st_make_grid(n = tile) %>%
+      map(st_sfc, crs = st_crs(aoi))
+    
+    aoi <- aoi_grid[which(unlist(map(aoi_grid, st_intersects, y = aoi, sparse = FALSE)))]
+    
+    filename <- paste0(filename, "_", 1:length(aoi))
+  }
   
   if(is.null(folder)) {
     folder <- collection
   }
   
-  filepath <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
+  filepaths <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
 
-  if (!file.exists(filepath)) {
-    message("File not detected. Downloading from STAC.")
-    filepath <- rsi::get_stac_data(
-      aoi = aoi,
+  if (!all(file.exists(filepaths))) {
+    message("Files not detected. Downloading from STAC.")
+    
+    get_stac_mappable <- function(aoi, output_filename, ...) {
+      message("Getting data: ", output_filename)
+      get_stac_data(aoi = aoi, output_filename = output_filename, ...)
+    }
+    
+    filepaths <- map2(
+      aoi, 
+      filepaths, 
+      get_stac_mappable,
       start_date = "2000-01-01",  end_date = "2024-01-01",
       asset_names = asset,
       collection = collection,
-      stac_source = "https://planetarycomputer.microsoft.com/api/stac/v1/",
-      output_filename = filepath,
-    )
+      stac_source = "https://planetarycomputer.microsoft.com/api/stac/v1/"
+    ) %>% unlist()
   } else {
-    message("File detected. Loading from disk.")
+    message("All files detected. Loading from disk.")
   }
   
-  raster <- rast(filepath)
+  if (length(filepaths) == 1) {
+    raster <- rast(filepaths) 
+  } else {
+    raster <- vrt(filepaths)
+  }
   
   if (!is.null(names)) {
     names(raster) <- names
