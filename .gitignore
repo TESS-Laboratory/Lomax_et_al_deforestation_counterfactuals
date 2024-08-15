@@ -1,13 +1,10 @@
 # Ignore all these
-
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
-
 data/*
 results/
-
 # Except these files
-
 !data/REDD_database.xlsx
+nohup.out
