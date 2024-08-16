@@ -12,7 +12,7 @@ START_YEAR <- 2016  # Simulated start year of protection project
 
 # Polygon sampling
 COUNTRY_BUFFER <- 10 # buffer distance from country border to exclude when generating polygons (km)
-POLY_SIZE <- 60000 # size of polygons in hectares
+POLY_SIZE <- 600000 # size of polygons in hectares
 POLY_SHAPE <- "hex"  # square or hex polygon
 POLY_BUFFER_RATIO <- 1 # polygon buffer area as ratio of polygon area
 SAMPLE_N <- 25  # number of polygons to sample per stratum
@@ -25,6 +25,8 @@ FOREST_EDGE_AREA <- 10 # Minimum continuous nonforest area to define as forest e
 # Data processing
 SEED <- 111  # Random number seed
 AGG <- 5  # Factor to aggregate rasters to speed data processing
+
+cat("Preparing data for ", COUNTRY, "- Start Year: ", START_YEAR, ", Polygon Size: ", POLY_SIZE, " ha")
 
 ### 2. Load datasets --------
 
@@ -105,6 +107,8 @@ names(fc_start) <- "fc_start"
 
 ## (b) Pixelwise distance to forest edge in start year
 
+print("Calculating distance to forest edge...")
+
 # Convert to equal area projection and aggregate
 fc_start_agg <- aggregate(fc_start, fact = AGG, fun = "modal")
 fc_start_ea <- project(fc_start_agg, CRS, method = "near")
@@ -140,9 +144,14 @@ names(dist_to_edge) <- "dist_to_edge"
 
 ## (c) Calculate slope from DEM
 
+print("Calculating slope...")
+
 slope <- terrain(dem)
 
 ## (d) Mask relevant raster layers to forest area in project start year
+
+print("Masking relevant rasters to forest area in project start year...")
+
 forest_vars <- list(biomass, dem, slope, ag_suitability, dist_to_edge) %>%
   mask_to_forest(fc_start_agg, combine = TRUE)
 
@@ -164,9 +173,11 @@ forest_vars <- list(biomass, dem, slope, ag_suitability, dist_to_edge) %>%
 
 # Extract fractional forest loss by jurisdiction
 
+print("Extracting jurisdictional forest loss and economic variables...")
+
 fc_loss_agg <- subset(fc_loss_agg, 1:(str_which(names(fc), as.character(START_YEAR))))
 # fc_1990_agg <- aggregate(fc_1990, fact = AGG, fun = "mean")
-fc_1990_agg <- subset(fc_binary_agg, "fc.1990")
+fc_1990_agg <- subset(fc_agg, "fc.1990")
 names(fc_1990_agg) <- "fc_1990"
 
 country_adm1_vars <- country_adm1 %>%
@@ -187,6 +198,8 @@ if(nrow(econ_vars) > 0) {
 }
 
 ## (f) Calculate distance from nearest river and road
+
+print("Calculating distance to rivers and roads")
 
 # Rasterize datasets
 tic(); rivers_rast <- rasterize_lines(rivers, fc_start_ea); toc()
@@ -253,12 +266,15 @@ print("Extracting data for polygon grid...")
 
 ## (a) Average jurisdiction-level variables
 
+print("Extracting jurisdiction-level variables...")
 grid_adm1_intersection <- grid_threshold %>%
   calc_intersection(country_adm1_vars, frac_col = "jurisdiction_frac") %>%
   group_by(ID) %>%
   summarise(across(.cols = starts_with("jurisdiction_loss"), .fns = ~ sum(.x * jurisdiction_frac)))
 
 ## (b) Forest fraction in protected areas
+
+print("Extracting forest fraction in protected areas...")
 
 # Find intersection of start year forest area in polygons with PAs
 grid_pa_intersection <- grid_threshold %>%
@@ -286,12 +302,17 @@ grid_pa_frac <- grid_pa_intersection_fc %>%
 
 ## (c) Fractional polygon overlap with ecoregion boundaries
 
+print("Extracting fractional ecoregion coverage...")
 grid_ecoregion_intersection <- grid_threshold %>%
   calc_intersection(ecoregions, frac_col = "eco_frac") %>%
   group_by(ID) %>%
   nest(.key = "eco_frac")
 
+print("Polygon variable extraction complete")
+
 ### 7. Extract all variables for grid and buffer polygons --------
+
+print("Extracting and combining raster data...")
 
 ## Extract raster variables for polygons and buffers
 raster_vars <- list(fc_start, fc_loss, forest_vars, ppt, tMean, dist_to_river,
@@ -305,6 +326,8 @@ grid_fc_buffer_vars <- grid_buffer_threshold %>%
   st_drop_geometry()
 
 ## Join with vector variables and create merged wide-format data frame
+
+print("Combining all variables...")
 all_vars <- list(grid_fc_raster_vars, grid_fc_buffer_vars, grid_adm1_intersection, grid_ecoregion_intersection, grid_pa_frac)
 
 grid_fc_all_vars <- all_vars %>%
@@ -314,6 +337,8 @@ grid_fc_all_vars <- all_vars %>%
 
 ### 8. Take stratified sample of polygons by actual cumulative deforestation after start year --------
 # TO DO: REWRITE OR REPACKAGE IN FUNCTION
+
+print("Calculating forest loss bins and generating stratified sample...")
 
 grid_loss_strata <- grid_fc_all_vars %>%
   st_drop_geometry() %>%
@@ -334,6 +359,7 @@ grid_sample_ids <- slice_sample(grid_loss_strata, n = SAMPLE_N, by = stratum)
 grid_vars_sample <- left_join(grid_fc_all_vars, grid_sample_ids)
 
 ### 8. Save data
+filepath <- paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds")
+write_rds(grid_vars_sample, filepath)
 
-write_rds(grid_vars_sample, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
-
+cat("Output written to disk as ", filepath)
