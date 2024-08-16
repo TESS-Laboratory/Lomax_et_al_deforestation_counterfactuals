@@ -11,6 +11,7 @@ wide_to_long <- function(df) {
   df_long <- df %>%
     pivot_longer(cols = contains(".")) %>%
     separate_wider_delim(cols = "name", delim = ".", names = c("var", "year")) %>%
+    mutate(year = as.numeric(year)) %>%
     pivot_wider(names_from = "var", values_from = "value")
   
   df_long
@@ -70,8 +71,9 @@ add_dist_to_treated <- function(sf, treated_id) {
 #' 
 #' @param df a data.frame containing polygon data
 #' @param treated_id the ID of the treated unit
+#' @param drop logical. Should the "eco_frac" column be dropped?
 
-add_shared_eco_frac <- function(df, treated_id) {
+add_shared_eco_frac <- function(df, treated_id, drop = FALSE) {
   eco_frac_treated <- df %>%
     filter(ID == treated_id) %>%
     unnest(eco_frac) %>%
@@ -89,6 +91,10 @@ add_shared_eco_frac <- function(df, treated_id) {
   
   df_eco_shared <- left_join(df, eco_shared)
   
+  if (drop == TRUE) {
+    df_eco_shared <- select(df_eco_shared, -eco_frac)
+  }
+  
   df_eco_shared
 }
 
@@ -101,8 +107,9 @@ add_shared_eco_frac <- function(df, treated_id) {
 #' 
 #' @param df a data.frame containing polygon data
 #' @param treated_id the ID of the treated unit
+#' @param drop logical. Should the "eco_frac" column be dropped?
 
-add_biome_match <- function(df, treated_id) {
+add_biome_match <- function(df, treated_id, drop = FALSE) {
   
   biomes_treated <- df %>%
     filter(ID == treated_id) %>%
@@ -117,6 +124,10 @@ add_biome_match <- function(df, treated_id) {
     summarise(shared_biome = max(shared_biome))
   
   df_biome_shared <- left_join(df, biome_shared)
+  
+  if (drop == TRUE) {
+    df_biome_shared <- select(df_biome_shared, -eco_frac)
+  }
   
   df_biome_shared
 }
@@ -192,19 +203,78 @@ prepare_outcomes <- function(sim, outcome_ts, pt) {
 #' @param out_model character. The outcome model to use (see `augsynth` function)
 #' @param ... Other arguments to pass to prepare_outcomes()
 
-run_synthetic_control <- function(sim, data, out_model = "Ridge", ...) {
+run_synthetic_control <- function(sim, match, data, out_model = "Ridge") {
   
   formula <- get_formula(sim)
   
-  data <- mutate(data, loss = prepare_outcomes(sim, loss, ...))
+  data_prepared <- data %>%
+    filter(year > (START_YEAR - match)) %>%
+    mutate(loss = prepare_outcomes(sim, loss, pt = match))
   
   synth <- augsynth(
     form = formula,
     unit = ID,
     time = year,
-    data = data,
+    data = data_prepared,
     progfunc = out_model,
     scm = TRUE
+  )
+  
+  synth
+  
+}
+
+#' @title Run synthetic control - MSCMT
+#' @description Helper function to run augmented synthetic control algorithm
+#' with specified default settings based on the simulation number provided
+#' 
+#' @usage run_synthetic_control_mscmt(sim, data)
+#' 
+#' @param sim integer. The desired simulation number
+#' @param data a data.frame containing input data
+#' @param out_model character. The outcome model to use (see `augsynth` function)
+#' @param ... Other arguments to pass to prepare_outcomes()
+
+run_synthetic_control_mscmt <- function(id, match, data) {
+  
+  data_prepared <- data %>%
+    filter(year > (START_YEAR - match)) %>%
+    mutate(name = as.character(ID)) %>%
+    as.data.frame() %>%
+    listFromLong(unit.variable = "ID", time.variable = "year", unit.names.variable = "name")
+  
+  controls_ids <- unique(grid_data$ID)[unique(grid_data$ID) != id] %>% as.character()
+  times_dep <- cbind("loss" = c(START_YEAR - match, START_YEAR))
+  times_pred <- cbind(
+    "fc_start" = c(START_YEAR, START_YEAR),
+    "buffer_loss" = c(START_YEAR - match, START_YEAR),
+    "biomass" = c(START_YEAR, START_YEAR),
+    "jurisdiction_loss" = c(START_YEAR - match, START_YEAR),
+    "precipitation" = c(START_YEAR, START_YEAR),
+    "temperature_2m" = c(START_YEAR, START_YEAR),
+    "elevation" = c(START_YEAR, START_YEAR),
+    "slope" = c(START_YEAR, START_YEAR),
+    "ag_suitability" = c(START_YEAR, START_YEAR),
+    "dist_to_road" = c(START_YEAR, START_YEAR),
+    "dist_to_river" = c(START_YEAR, START_YEAR),
+    "time_to_city" = c(START_YEAR, START_YEAR),
+    "time_to_port" = c(START_YEAR, START_YEAR),
+    "cropland" = c(START_YEAR, START_YEAR),
+    "protected_frac" = c(START_YEAR, START_YEAR),
+    "pop_density" = c(START_YEAR - match, START_YEAR),
+    "dist_to_edge" = c(START_YEAR, START_YEAR),
+    "dist_to_treated" = c(START_YEAR, START_YEAR),
+    "eco_frac_shared" = c(START_YEAR, START_YEAR)
+  )
+  
+  synth <- mscmt(
+    data = data_prepared,
+    treatment.identifier = as.character(id),
+    controls.identifier = controls_ids,
+    times.dep = times_dep,
+    times.pred = times_pred,
+    agg.fns = rep("mean", ncol(times_pred)),
+    seed = SEED
   )
   
   synth
