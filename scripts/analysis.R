@@ -8,9 +8,20 @@ source("scripts/load.R")
 # Data selection
 COUNTRY <- "Cote d'Ivoire"  # Target country
 START_YEAR <- 2016  # Simulated start year of protection project
-MATCHING_PERIOD <- 16  # Length of pre-intervention period to use for matching (years)
+MATCHING_PERIODS <- c(4,8,12,16,20,24)  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-SIMULATIONS <- c(1,2,3,4,5)
+SIMULATIONS <- 1:6
+
+# Simulations to run for RQ1 and RQ3 (RQ2 and RQ4 use distinct data)
+# simulation_match_df <- tibble(
+#   sim = c(SIMULATIONS, rep(5, length(MATCHING_PERIODS))),
+#   match = c(rep(8, length(SIMULATIONS)), MATCHING_PERIODS)
+# )
+
+simulation_match_df <- tibble(
+  sim = rep(SIMULATIONS, each = length(MATCHING_PERIODS)),
+  match = rep(MATCHING_PERIODS, length(SIMULATIONS))
+)
 
 ### 2. Load data
 ## To fix tomorrow - now have the geoms attached to grid_data, which is in wide format
@@ -35,7 +46,7 @@ sc_results <- map(sample_ids$ID, function(id) {
     add_dist_to_treated(id) %>%
     st_drop_geometry() %>%
     add_shared_eco_frac(id) %>%
-    add_biome_match(id)
+    add_biome_match(id, drop = TRUE)
   
   # Prepare data to format required by augsynth
   
@@ -47,11 +58,11 @@ sc_results <- map(sample_ids$ID, function(id) {
   # Run synthetic controls for different simulations
   
   message("Fitting synthetic control: ID = ", id)
-  sim_df <- tibble(
-    ID = id,
-    stratum = sample_ids$stratum[sample_ids$ID == id],
-    sim = SIMULATIONS) %>%
-    mutate(synth = map(sim, run_synthetic_control, data = grid_data_prepared))
+  sim_df <- simulation_match_df %>%
+    mutate(ID = id,
+           stratum = sample_ids$stratum[sample_ids$ID == id]
+    ) %>%
+    mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared))
 
   sim_df
 })
@@ -68,11 +79,12 @@ sc_df <- sc_results %>%
   unnest(sc_results)
 
 set.seed(111)
-viz_ids <- sample(sample_ids$ID, 4)
+viz_ids <- sample(sample_ids$ID, 36)
 
 ts_plots <- sc_df %>%
-  # filter(ID %in% viz_ids) %>%
-  filter(sim %in% c(1, 5)) %>%
+  filter(ID %in% viz_ids) %>%
+  filter(match == 8) %>%
+  # filter(sim %in% c(1, 5)) %>%
   ggplot(aes(x = as.numeric(year))) +
   geom_line(aes(y = loss, colour = "Observed"), lwd = 0.9) +
   geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
@@ -81,8 +93,8 @@ ts_plots <- sc_df %>%
   theme_bw() +
   labs(x = "Year", y = "Annual loss rate (area frac)", colour = NULL) +
   scale_colour_manual(
-    labels = c("Prior outcomes only (S1)", "All covariates (S5)", "Observed"),
-    values = c("#fb8072", "#b3de69", "black"))
+    labels = c(paste0("S", 1:6), "Observed"),
+    values = c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33', "black"))
 
 # ts_plots_post <- sc_df %>%
 #   # filter(ID %in% viz_ids) %>%
@@ -108,7 +120,7 @@ ggsave(
 sc_mae <- sc_df %>%
   mutate(test_period = (year > START_YEAR)) %>%
   mutate(abs_error = abs(sc_loss - loss)) %>%
-  group_by(ID, sim, test_period) %>%
+  group_by(ID, sim, match, test_period) %>%
   summarise(mae = mean(abs_error))
 
 test_period_lookup <- tibble(
@@ -116,34 +128,30 @@ test_period_lookup <- tibble(
   label = c("Test period", "Matching period")
 )
 
-mae_plot <- sc_mae %>%
+mae_plot_sim <- sc_mae %>%
+  filter(match == 8) %>%
   left_join(test_period_lookup) %>%
   ggplot(aes(x = as.factor(sim), y = mae, fill = as.factor(sim))) +
-  geom_boxplot(alpha = 0.25, show.legend = FALSE) +
+  geom_boxplot(alpha = 0.5, show.legend = FALSE) +
+  scale_fill_brewer(palette = "Set1") +
   facet_wrap(~label) +
   theme_bw() +
   labs(x = "Simulation", y = "Mean absolute error\n(annual loss rate)")
 
 ggsave(
-  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_mae_plots.jpg"),
-  mae_plot,
+  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_mae_plot_sim.jpg"),
+  mae_plot_sim,
   width = 20, height = 16, dpi = 300, units = "cm"
 )
 
-# observed_loss <- grid_data %>%
-#   wide_to_long() %>%
-#   filter(year > START_YEAR) %>%
-#   group_by(ID) %>%
-#   summarise(mean_loss = mean(loss))
-# 
-# sc_mae_frac <- sc_mae %>%
-#   left_join(observed_loss) %>%
-#   mutate(mae_frac = mae / mean_loss)
-# 
-# ggplot(sc_mae_frac, aes(x = mean_loss, y = mae, colour = as.factor(stratum))) +
-#   geom_point() +
-#   geom_abline(slope = 1, intercept = 0, colour = "grey20") +
-#   theme_bw() +
-#   labs(x = "Observed mean forest loss in test period",
-#        y = "Mean absolute error of synthetic\ncontrol in test period",
-#        colour = "Forest loss stratum")
+# Mean absolute error by match period
+
+mae_plot_match <- sc_mae %>%
+  filter(sim == 5) %>%
+  left_join(test_period_lookup) %>%
+  ggplot(aes(x = as.factor(match), y = mae, fill = as.factor(match))) +
+  geom_boxplot(alpha = 0.5, show.legend = FALSE) +
+  scale_fill_brewer(palette = "Greens") +
+  facet_wrap(~label) +
+  theme_bw() +
+  labs(x = "Matching period", y = "Mean absolute error\n(annual loss rate)")
