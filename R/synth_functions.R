@@ -140,7 +140,7 @@ add_biome_match <- function(df, treated_id, drop = FALSE) {
 #' 
 #' @param sim numeric. The simulation number
 
-get_formula <- function(sim) {
+get_formula <- function(sim, econ == TRUE) {
   if (sim == 1) {
     augsynth_formula <- "loss ~ treated"
   } else if (sim %in% c(2, 3)) {
@@ -163,6 +163,10 @@ get_formula <- function(sim) {
                             eco_frac_shared"
   } else {
     stop("Not a valid simulation. Must be an integer between 1 and 6.")
+  }
+  
+  if (econ == TRUE) {
+    augsynth_formula <- paste0(augsynth_formula, "+ grp_pc_usd_2015 + ag_grp_frac")
   }
   
   formula(augsynth_formula)
@@ -206,6 +210,10 @@ prepare_outcomes <- function(sim, outcome_ts, pt) {
 run_synthetic_control <- function(sim, match, data, out_model = "Ridge") {
   
   formula <- get_formula(sim)
+  
+  if (sim %in% c(5,6)) {
+    data <- filter(data, shared_biome == 1)
+  }
   
   data_prepared <- data %>%
     filter(year > (START_YEAR - match)) %>%
