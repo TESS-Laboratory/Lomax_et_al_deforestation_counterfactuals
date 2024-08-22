@@ -140,7 +140,7 @@ add_biome_match <- function(df, treated_id, drop = FALSE) {
 #' 
 #' @param sim numeric. The simulation number
 
-get_formula <- function(sim, econ == TRUE) {
+get_formula <- function(sim, econ = TRUE) {
   if (sim == 1) {
     augsynth_formula <- "loss ~ treated"
   } else if (sim %in% c(2, 3)) {
@@ -165,7 +165,7 @@ get_formula <- function(sim, econ == TRUE) {
     stop("Not a valid simulation. Must be an integer between 1 and 6.")
   }
   
-  if (econ == TRUE) {
+  if (econ == TRUE & (sim != 1)) {
     augsynth_formula <- paste0(augsynth_formula, "+ grp_pc_usd_2015 + ag_grp_frac")
   }
   
