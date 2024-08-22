@@ -5,6 +5,6 @@
 .Ruserdata
 data/*
 results/
+*.out
 # Except these files
 !data/REDD_database.xlsx
-nohup.out
