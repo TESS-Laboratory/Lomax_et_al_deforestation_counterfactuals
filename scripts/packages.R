@@ -19,10 +19,16 @@ library(units)
 library(exactextractr)
 library(landscapemetrics)
 library(augsynth)
+library(MSCMT)
+
+# Parallelisation
+library(future)
+library(furrr)
 
 # # data visualisation
-# library(tmap)
-# library(ggplot2)
-# 
-# # time tracking
+library(tmap)
+library(ggplot2)
+
+# workflow utilities
 library(tictoc)
+library(pushoverr)
