@@ -96,6 +96,11 @@ get_raster <- function(folder, match = NULL, names = NULL, ext = ".tif", source 
   
   if (!is.null(match)) {
     match <- data_lookup[data_lookup$country == match,][[source]]
+    
+    if (length(match) == 0) {
+      stop("No files found matching string pattern")
+    }
+    
     file_paths <- Sys.glob(paste0(folder, "/*", match, "*", ext, "*"))
     
   } else {
@@ -131,7 +136,7 @@ get_tiled_raster <- function(folder, match = NULL, layer = NULL, names = NULL, e
     file_paths <- Sys.glob(paste0(folder, "/*", ext, "*"))
   }
   
-  # Create virtual raster
+  # Create virtual raster 
   vrt <- vrt(file_paths)
   
   # Subset and/or rename layers
@@ -232,4 +237,22 @@ get_stac_raster <- function(aoi = country, filename = COUNTRY, collection, asset
   
   raster
 
+}
+
+
+#' @title Simplify string
+#' @description Converts character strings to lower case ASCII text to reduce
+#' issues with joining data frames from different datasets.
+#' 
+#' @usage simplify_string(x)
+#' 
+#' @param x character vector
+
+simplify_string <- function(x) {
+  
+  output_x <- x %>%
+    tolower() %>%
+    stri_trans_general(id = "Latin-ASCII")
+  
+  output_x
 }

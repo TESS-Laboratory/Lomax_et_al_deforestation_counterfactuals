@@ -6,7 +6,7 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Spatial and temporal range
-COUNTRY <- "Colombia"  # Target country
+COUNTRY <- "Bolivia"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
 
@@ -53,11 +53,13 @@ country <- gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>%
 country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>%
   st_as_sf() %>%
   st_transform(CRS) %>%
-  select(NAME_1, GID_1, geometry)
+  select(NAME_1, geometry) %>%
+  mutate(NAME_1 = simplify_string(NAME_1))
 econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
   filter(country == COUNTRY) %>%
-  select(region, year, grp_pc_usd_2015, ag_grp_pc_usd_2015) %>%
-  filter(year >= 1991 & year <= START_YEAR)
+  select(region, year, pop, grp_pc_usd_2015, ag_grp_pc_usd_2015) %>%
+  filter(year >= 1991 & year <= START_YEAR) %>%
+  mutate(region = simplify_string(region))
 
 # Raster data
 fc <- get_tiled_raster("data/raw/raster/tmf_binary", match = COUNTRY, names = paste0("fc.", 1990:2023))
@@ -81,6 +83,12 @@ ag_suitability <- get_raster(
   names = "ag_suitability")
 travel_time <- get_raster("data/raw/raster/travel_time", names = c("time_to_city", "time_to_port"))
 population <- get_raster("data/raw/raster/population", names = paste0("pop_density.", 1991:2023))
+
+# Replace with gapfilled population raster if present
+population_fill <- safely(get_raster, otherwise = NULL)("data/processed/raster/population", match = COUNTRY, source = "country")$result
+if (!is.null(population_fill)) {
+  population <- population_fill
+}
 
 # Vector data
 ecoregions <- st_read("data/raw/vector/ecoregions2017/Ecoregions2017.shp") %>%
@@ -166,26 +174,10 @@ forest_vars <- list(biomass, dem, slope, ag_suitability, dist_to_edge) %>%
 
 ## (e) Jurisdiction-level forest loss and economic variables
 
-# Aggregate forest loss raster to reduce computation time
-# pre_start_indices <- 1:(str_which(names(fc), as.character(START_YEAR)))
-# tic()
-# fc_loss_agg <- map(pre_start_indices, function(i) {
-#   
-#   message("Aggregating layer: ", i)
-#   out <- fc_loss %>%
-#   subset(i) %>%
-#   aggregate(fact = AGG, fun = "mean")
-#   
-#   out
-# }) %>% rast()
-# toc()
-
 # Extract fractional forest loss by jurisdiction
 
 print("Extracting jurisdictional forest loss and economic variables...")
 
-# fc_loss_agg <- subset(fc_loss_agg, 1:(str_which(names(fc), as.character(START_YEAR))))
-# fc_1990_agg <- aggregate(fc_1990, fact = AGG, fun = "mean")
 fc_1990_agg <- subset(fc_agg, "fc.1990")
 names(fc_1990_agg) <- "fc_1990"
 
@@ -198,12 +190,36 @@ country_adm1_vars <- country_adm1 %>%
 # Extract jurisdiction-level economic variables (if present)
 
 if(nrow(econ_vars) > 0) {
-  econ_vars_wide <- econ_vars %>%
+  
+  econ_adm1 <- country_adm1 %>%
+    st_drop_geometry() %>%
+    left_join(econ_vars, by = c("NAME_1" = "region"))
+  
+  econ_adm1_means <- econ_adm1 %>%
+    group_by(NAME_1) %>%
+    summarise(across(-year, mean, na.rm = TRUE, .names = "{col}_MEAN")) %>%
+    select(NAME_1, ends_with("MEAN")) %>%
+    mutate(across(contains("grp"), .fns = \(x) ifelse(
+      is.na(x),
+      weighted.mean(x, pop_MEAN, na.rm = TRUE),
+      x))) %>%
+    select(-pop_MEAN)
+  
+  econ_vars_full <- econ_adm1 %>%
+    complete(NAME_1, year = 1991:2023) %>%
+    left_join(econ_adm1_means) %>%
+    mutate(grp_pc_usd_2015 = ifelse(is.na(grp_pc_usd_2015), grp_pc_usd_2015_MEAN, grp_pc_usd_2015),
+           ag_grp_pc_usd_2015 = ifelse(is.na(ag_grp_pc_usd_2015), ag_grp_pc_usd_2015_MEAN, ag_grp_pc_usd_2015)) %>%
+    select(-pop, -ends_with("MEAN")) %>%
+    drop_na()
+  
+  econ_vars_wide <- econ_vars_full %>%
     mutate(ag_grp_frac = ag_grp_pc_usd_2015 / grp_pc_usd_2015) %>%
     select(-ag_grp_pc_usd_2015) %>%
     pivot_wider(names_from = year, values_from = contains("grp"), names_sep = ".")
   
-  country_adm1_vars <- left_join(country_adm1_vars, econ_vars_wide, by = c("NAME_1" = "region"))
+  country_adm1_vars <- left_join(country_adm1_vars, econ_vars_wide)
+  
 }
 
 ## (f) Calculate distance from nearest river and road
@@ -298,18 +314,18 @@ for (i in POLY_SIZE) {
   
   # Find intersection of start year forest area in polygons with PAs
   grid_pa_intersection <- grid_threshold %>%
-    poly_extract(fc_start_agg) %>%
+    poly_extract(fc_start) %>%
     mutate(poly_area = st_area(x)) %>%
     st_intersection(protected_areas) %>%
-    mutate(int_area = st_area(x)) %>%
     group_by(ID) %>%
-    summarise(fc_start = mean(fc_start),
+    summarise(x = st_union(x),
+              fc_start = mean(fc_start),
               poly_area = first(poly_area),
-              int_area = sum(int_area))
+              int_area = st_area(x))
   
   # Calculate area of forest in PAs as frac of total forest in polygon
   grid_pa_intersection_fc <- grid_pa_intersection %>%
-    poly_extract(fc_start_agg, col_prefix = "int_") %>%
+    poly_extract(fc_start, col_prefix = "int_") %>%
     st_drop_geometry() %>%
     mutate(fc_protected = int_fc_start * int_area) %>%
     mutate(protected_frac = drop_units(fc_protected / (fc_start * poly_area)))

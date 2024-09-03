@@ -14,6 +14,7 @@ library(magrittr)
 library(purrr)
 library(ggplot2)
 library(units)
+library(stringi)
 
 # data analysis
 library(exactextractr)
