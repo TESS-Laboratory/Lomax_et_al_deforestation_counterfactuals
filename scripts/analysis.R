@@ -8,10 +8,11 @@ source("scripts/load.R")
 
 # Data selection
 COUNTRY <- "Brazil"  # Target country
-START_YEAR <- 2016  # Simulated start year of protection project
+START_YEAR <- 2016 # Simulated start year of protection project
 MATCHING_PERIODS <- c(4,8,12,16,20,24)  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
 SIMULATIONS <- 1:5  # Simulations to run
+ECON <- TRUE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
 N_CORES <- 1
@@ -25,10 +26,11 @@ simulation_match_df <- tibble(
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
-if (length(cmd_args) == 3) {
+if (length(cmd_args) == 4) {
   COUNTRY <- cmd_args[1]
   MAX_POOL <- as.numeric(cmd_args[2])
   N_CORES <- as.numeric(cmd_args[3])
+  ECON <- as.logical(as.numeric(cmd_args[4]))
 } else {
   print("Insufficient command line arguments given - using default values")
 }
@@ -54,7 +56,7 @@ sample_ids <- grid_data %>%
 
 # Reduce potential donors for large donor pools
 if (nrow(grid_data) > MAX_POOL) {
-  message("Donor pool too large; reducing to MAX_POOL value")
+  message("Donor pool too large; reducing to ", MAX_POOL)
   
   n_sample <- nrow(sample_ids)
   grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
@@ -96,7 +98,7 @@ sc_results <- future_map(sample_ids$ID, function(id) {
     mutate(ID = id,
            stratum = sample_ids$stratum[sample_ids$ID == id]
     ) %>%
-    mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared))
+    mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared, econ = ECON))
 
   sim_df
 },

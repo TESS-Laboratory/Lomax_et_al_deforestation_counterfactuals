@@ -207,9 +207,9 @@ prepare_outcomes <- function(sim, outcome_ts, pt) {
 #' @param out_model character. The outcome model to use (see `augsynth` function)
 #' @param ... Other arguments to pass to prepare_outcomes()
 
-run_synthetic_control <- function(sim, match, data, out_model = "Ridge") {
+run_synthetic_control <- function(sim, match, data, econ = TRUE, out_model = "Ridge") {
   
-  formula <- get_formula(sim)
+  formula <- get_formula(sim, econ = econ)
   
   if (sim %in% c(5,6)) {
     data <- filter(data, shared_biome == 1)
@@ -219,7 +219,9 @@ run_synthetic_control <- function(sim, match, data, out_model = "Ridge") {
     filter(year > (START_YEAR - match)) %>%
     mutate(loss = prepare_outcomes(sim, loss, pt = match))
   
-  synth <- augsynth(
+  augsynth_safe <- possibly(augsynth, otherwise = NA)
+  
+  synth <- augsynth_safe(
     form = formula,
     unit = ID,
     time = year,
