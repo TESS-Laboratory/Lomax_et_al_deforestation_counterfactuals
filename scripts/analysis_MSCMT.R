@@ -1,20 +1,40 @@
 #### Data analysis script
-#### Fits augmented synthetic controls for sample polygon data
+#### Fits augmented synthetic controls for sample polygon data and writes the
+#### results to disk as a CSV.
 
 source("scripts/load.R")
-library(MSCMT)
-library(furrr)
 
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Cote d'Ivoire"  # Target country
-START_YEAR <- 2016  # Simulated start year of protection project
-MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
+COUNTRY <- "Bolivia"  # Target country
+START_YEAR <- 2016 # Simulated start year of protection project
+MATCHING_PERIOD <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-CORES <- 16
+SIMULATIONS <- 5  # Simulations to run
+ECON <- TRUE  # Economic data present for country
+SEED <- 1471
+MAX_POOL <- 100  # Max number of potential donor polygons to constrain 
+N_CORES <- 16
 
-plan(multisession, workers = CORES)
+# Get parameters from command line if running from terminal
+cmd_args <- commandArgs(TRUE)
+
+if (length(cmd_args) == 4) {
+  COUNTRY <- cmd_args[1]
+  MAX_POOL <- as.numeric(cmd_args[2])
+  N_CORES <- as.numeric(cmd_args[3])
+  ECON <- as.logical(as.numeric(cmd_args[4]))
+} else {
+  print("Insufficient command line arguments given - using default values")
+}
+
+cat("Fitting synthetic controls for ", COUNTRY, "- Start Year: ", START_YEAR, ", Polygon Size: ", POLY_SIZE, " ha")
+
+# Parallelisation
+if (N_CORES > 1) {
+  plan(multicore, workers = N_CORES)
+}
 
 ### 2. Load data
 ## To fix tomorrow - now have the geoms attached to grid_data, which is in wide format
@@ -28,7 +48,24 @@ sample_ids <- grid_data %>%
   select(ID, stratum) %>%
   filter(!is.na(stratum))
 
+# Reduce potential donors for large donor pools
+if (nrow(grid_data) > MAX_POOL) {
+  message("Donor pool too large; reducing to ", MAX_POOL)
+  
+  n_sample <- nrow(sample_ids)
+  grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
+  
+  set.seed <- SEED
+  n_pool <- MAX_POOL - n_sample
+  grid_data_pool <- grid_data %>%
+    filter(!(ID %in% sample_ids$ID)) %>%
+    slice_sample(n = n_pool)
+  
+  grid_data <- bind_rows(grid_data_sample, grid_data_pool)
+}
+
 # Loop through sample to perform analysis
+set.seed(SEED)
 sc_results <- future_map(sample_ids$ID, .options = furrr_options(seed = TRUE), .progress = TRUE, function(id) {
   
   # Add additional variables specific to treated unit
@@ -58,91 +95,26 @@ sc_results <- future_map(sample_ids$ID, .options = furrr_options(seed = TRUE), .
   sim_df
 })
 
-
 ### 4. Combine results and summarise data
 
 # Convert back to time series of observed and modelled forest loss for each unit
 
-sc_df <- sc_results %>%
+variable_importance_df <- sc_results %>%
   bind_rows() %>%
-  mutate(sc_results = map2(synth, ID, extract_synth)) %>%
+  mutate(sc_results = map(synth, extract_synth_importance)) %>%
   select(-synth) %>%
   unnest(sc_results)
 
-set.seed(111)
-viz_ids <- sample(sample_ids$ID, 36)
+write_csv(variable_importance_df,
+          paste0("results/var_importance/", COUNTRY, "_importance.csv"))
 
-ts_plots <- sc_df %>%
-  filter(ID %in% viz_ids) %>%
-  filter(match == 8) %>%
-  # filter(sim %in% c(1, 5)) %>%
-  ggplot(aes(x = as.numeric(year))) +
-  geom_line(aes(y = loss, colour = "Observed"), lwd = 0.9) +
-  geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
-  geom_vline(xintercept = START_YEAR) +
-  facet_wrap(~ID) +
-  theme_bw() +
-  labs(x = "Year", y = "Annual loss rate (area frac)", colour = NULL) +
-  scale_colour_manual(
-    labels = c(paste0("S", 1:6), "Observed"),
-    values = c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33', "black"))
+message("Written to disk: ", COUNTRY, "_importance.csv")
+pushover(paste0("Variable importance analysis completed: ", COUNTRY))
 
-# ts_plots_post <- sc_df %>%
-#   # filter(ID %in% viz_ids) %>%
-#   filter(sim %in% c(1, 5)) %>%
-#   filter(year >= START_YEAR) %>%
-#   ggplot(aes(x = as.numeric(year))) +
-#   geom_line(aes(y = loss)) +
-#   geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
-#   geom_vline(xintercept = START_YEAR) +
-#   facet_wrap(~ID) +
-#   theme_bw() +
-#   labs(x = "Year", y = "Annual loss rate (area frac)", colour = NULL) +
-#   scale_colour_discrete(labels = c("Prior outcomes only", "All covariates"))
+###
 
-ggsave(
-  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_ts_plots.jpg"),
-  ts_plots,
-  width = 24, height = 20, dpi = 300, units = "cm"
-)
+var_importance <- read_csv(paste0("results/var_importance/Bolivia_importance.csv"))
 
-# Mean absolute error per simulation
-
-sc_mae <- sc_df %>%
-  mutate(test_period = (year > START_YEAR)) %>%
-  mutate(abs_error = abs(sc_loss - loss)) %>%
-  group_by(ID, sim, match, test_period) %>%
-  summarise(mae = mean(abs_error))
-
-test_period_lookup <- tibble(
-  test_period = c(TRUE, FALSE),
-  label = c("Test period", "Matching period")
-)
-
-mae_plot_sim <- sc_mae %>%
-  filter(match == 8) %>%
-  left_join(test_period_lookup) %>%
-  ggplot(aes(x = as.factor(sim), y = mae, fill = as.factor(sim))) +
-  geom_boxplot(alpha = 0.5, show.legend = FALSE) +
-  scale_fill_brewer(palette = "Set1") +
-  facet_wrap(~label) +
-  theme_bw() +
-  labs(x = "Simulation", y = "Mean absolute error\n(annual loss rate)")
-
-ggsave(
-  paste0("results/figures/sc_plots/", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, "_", MATCHING_PERIOD, "Y_mae_plot_sim.jpg"),
-  mae_plot_sim,
-  width = 20, height = 16, dpi = 300, units = "cm"
-)
-
-# Mean absolute error by match period
-
-mae_plot_match <- sc_mae %>%
-  filter(sim == 5) %>%
-  left_join(test_period_lookup) %>%
-  ggplot(aes(x = as.factor(match), y = mae, fill = as.factor(match))) +
-  geom_boxplot(alpha = 0.5, show.legend = FALSE) +
-  scale_fill_brewer(palette = "Greens") +
-  facet_wrap(~label) +
-  theme_bw() +
-  labs(x = "Matching period", y = "Mean absolute error\n(annual loss rate)")
+var_importance_all <- var_importance %>%
+  group_by(variable) %>%
+  summarise(mean = mean(min.loss.w))
