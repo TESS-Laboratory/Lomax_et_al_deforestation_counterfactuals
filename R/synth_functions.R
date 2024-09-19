@@ -213,13 +213,19 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, out_model = "Ri
   
   if (sim %in% c(5,6)) {
     data <- filter(data, shared_biome == 1)
+    
+    shared_eco_list <- filter(data, eco_frac_shared != 0)
+    
+    if (length(unique(shared_eco_list$ID)) == 1) {
+      return(NA)
+    }
   }
   
   data_prepared <- data %>%
     filter(year > (START_YEAR - match)) %>%
     mutate(loss = prepare_outcomes(sim, loss, pt = match))
   
-  augsynth_safe <- possibly(augsynth, otherwise = NA)
+  augsynth_safe <- possibly(augsynth, otherwise = NA, quiet = FALSE)
   
   synth <- augsynth_safe(
     form = formula,
@@ -247,19 +253,23 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, out_model = "Ri
 
 run_synthetic_control_mscmt <- function(id, match, data) {
   
+  match2 <- match - 1
+  
   data_prepared <- data %>%
-    filter(year > (START_YEAR - match)) %>%
-    mutate(name = as.character(ID)) %>%
-    as.data.frame() %>%
+    # filter(year > (START_YEAR - match)) %>%
+    mutate(name = paste0("ID", as.character(ID))) %>%
+    as.data.frame()
+  
+  data_list <- data_prepared %>%
     listFromLong(unit.variable = "ID", time.variable = "year", unit.names.variable = "name")
   
-  controls_ids <- unique(grid_data$ID)[unique(grid_data$ID) != id] %>% as.character()
-  times_dep <- cbind("loss" = c(START_YEAR - match, START_YEAR))
+  controls_ids <- unique(data_prepared$name)[unique(data_prepared$ID) != id] %>% as.character()
+  times_dep <- cbind("loss" = c(START_YEAR - match2, START_YEAR))
   times_pred <- cbind(
     "fc_start" = c(START_YEAR, START_YEAR),
-    "buffer_loss" = c(START_YEAR - match, START_YEAR),
+    "buffer_loss" = c(START_YEAR - match2, START_YEAR),
     "biomass" = c(START_YEAR, START_YEAR),
-    "jurisdiction_loss" = c(START_YEAR - match, START_YEAR),
+    "jurisdiction_loss" = c(START_YEAR - match2, START_YEAR),
     "precipitation" = c(START_YEAR, START_YEAR),
     "temperature_2m" = c(START_YEAR, START_YEAR),
     "elevation" = c(START_YEAR, START_YEAR),
@@ -271,26 +281,33 @@ run_synthetic_control_mscmt <- function(id, match, data) {
     "time_to_port" = c(START_YEAR, START_YEAR),
     "cropland" = c(START_YEAR, START_YEAR),
     "protected_frac" = c(START_YEAR, START_YEAR),
-    "pop_density" = c(START_YEAR - match, START_YEAR),
+    "pop_density" = c(START_YEAR - match2, START_YEAR),
     "dist_to_edge" = c(START_YEAR, START_YEAR),
     "dist_to_treated" = c(START_YEAR, START_YEAR),
     "eco_frac_shared" = c(START_YEAR, START_YEAR)
   )
   
-  synth <- mscmt(
-    data = data_prepared,
-    treatment.identifier = as.character(id),
+  if ("grp_pc_usd_2015" %in% colnames(data)) {
+    times_pred <- cbind(times_pred,
+                        "grp_pc_usd_2015" = c(START_YEAR - match2, START_YEAR),
+                        "ag_grp_frac" = c(START_YEAR - match2, START_YEAR))
+  }
+  
+  mscmt_safe <- possibly(mscmt, otherwise = NA, quiet = FALSE)
+  
+  synth <- mscmt_safe(
+    data = data_list,
+    treatment.identifier = paste0("ID", as.character(id)),
     controls.identifier = controls_ids,
     times.dep = times_dep,
     times.pred = times_pred,
-    agg.fns = rep("mean", ncol(times_pred)),
-    seed = SEED
+    agg.fns = rep("mean", ncol(times_pred))
   )
   
   synth
   
 }
- 
+
 #' @title Extract synth error
 #' @description Extracts a time series or average value of the absolute error
 #' (equivalent to the absolute average treatment effect on the treated) from
@@ -304,6 +321,9 @@ run_synthetic_control_mscmt <- function(id, match, data) {
 #' post-intervention period?
 
 extract_synth_error <- function(synth, ts = FALSE) {
+  
+  if (is.na(synth)) return(NA)
+  
   att_df <- summary(synth)$att
   
   intervention_year <- synth$t_int
@@ -320,7 +340,8 @@ extract_synth_error <- function(synth, ts = FALSE) {
 }
 
 #' @title Extract synth
-#' @description Unpacks a synth object into a data frame of 
+#' @description Unpacks a synth object into a data frame of observed and predicted
+#' loss values
 #' 
 #' @usage extract_synth(synth, id)
 #' 
@@ -341,4 +362,25 @@ extract_synth <- function(synth, id) {
     mutate(sc_loss = predict(synth))
   
   results_df
+}
+
+#' @title Extract synth variable importance
+#' @description Extracts a data frame of variable importance scores for
+#' an object created by the MSCMT::mscmt() function. 
+#' 
+#' @usage extract_synth_importance(synth, id)
+#' 
+#' @param synth an augsynth object
+#' @param id numeric. The polygon ID of the treated unit for a given synth
+
+extract_synth_importance <- function(synth) {
+  
+  if (all(is.na(synth))) return(NA)
+   else {
+     v <- synth$v %>%
+       as.data.frame() %>%
+       tibble::rownames_to_column("variable") %>%
+       mutate(variable = str_extract(variable, "[^.]+"))
+     v
+   }
 }
