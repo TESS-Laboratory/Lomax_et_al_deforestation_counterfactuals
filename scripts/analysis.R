@@ -7,11 +7,11 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Brazil"  # Target country
+COUNTRY <- "Bolivia"  # Target country
 START_YEAR <- 2016 # Simulated start year of protection project
-MATCHING_PERIODS <- c(4,8,12,16,20,24)  # Length of pre-intervention period to use for matching (years)
+MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-SIMULATIONS <- 1:5  # Simulations to run
+SIMULATIONS <- 5  # Simulations to run
 ECON <- TRUE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
@@ -26,11 +26,12 @@ simulation_match_df <- tibble(
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
-if (length(cmd_args) == 4) {
+if (length(cmd_args) == 5) {
   COUNTRY <- cmd_args[1]
-  MAX_POOL <- as.numeric(cmd_args[2])
-  N_CORES <- as.numeric(cmd_args[3])
-  ECON <- as.logical(as.numeric(cmd_args[4]))
+  POLY_SIZE <- as.numeric(cmd_args[2])
+  MAX_POOL <- as.numeric(cmd_args[3])
+  N_CORES <- as.numeric(cmd_args[4])
+  ECON <- as.logical(as.numeric(cmd_args[5]))
 } else {
   print("Insufficient command line arguments given - using default values")
 }
@@ -112,6 +113,7 @@ toc()
 
 sc_df <- sc_results %>%
   bind_rows() %>%
+  filter(!is.na(synth)) %>%
   mutate(sc_results = map2(synth, ID, extract_synth)) %>%
   select(-synth) %>%
   unnest(sc_results)
