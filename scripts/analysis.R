@@ -7,12 +7,12 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Bolivia"  # Target country
-START_YEAR <- 2016 # Simulated start year of protection project
+COUNTRY <- "Myanmar"  # Target country
+START_YEAR <- 1998 # Simulated start year of protection project
 MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
 SIMULATIONS <- 5  # Simulations to run
-ECON <- TRUE  # Economic data present for country
+ECON <- FALSE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
 N_CORES <- 1
@@ -84,7 +84,9 @@ sc_results <- future_map(sample_ids$ID, function(id) {
     add_dist_to_treated(id) %>%
     st_drop_geometry() %>%
     add_shared_eco_frac(id) %>%
-    add_biome_match(id, drop = TRUE)
+    add_biome_match(id, drop = TRUE) %>%
+    select(-stratum, -cum_loss) %>%
+    drop_na()  # Remove donors with NA values in key variables
   
   # Prepare data to format required by augsynth
   
