@@ -29,6 +29,7 @@ library(furrr)
 # # data visualisation
 library(tmap)
 library(ggplot2)
+library(patchwork)
 
 # workflow utilities
 library(tictoc)
