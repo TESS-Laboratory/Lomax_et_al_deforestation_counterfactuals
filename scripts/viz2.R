@@ -88,13 +88,13 @@ stratum_freq <- defor_long_loss %>%
 # Back-calculate population-level errors for each country and polygon size
 
 stratum_error <- sc_df %>%
-  mutate(period = ifelse(year > START_YEAR, "test", "match")) %>%
-  group_by(country, poly_size, match, stratum, sim, ID, period) %>%
+  filter(year > START_YEAR) %>%
+  group_by(country, poly_size, match, stratum, sim, ID) %>%
   summarise(mae = abs(mean(sc_loss) - mean(loss)) * 100,
             mean_bias = mean(sc_loss - loss) * 100,
             frac_mae = mae / mean(loss * 100),
             frac_bias = mean_bias / mean(loss * 100)) %>%
-  group_by(country, poly_size, match, stratum, sim, period) %>%
+  group_by(country, poly_size, match, stratum, sim) %>%
   summarise(stratum_mae = mean(mae),
             stratum_bias = mean(mean_bias),
             mean_frac_mae = mean(frac_mae),
@@ -102,7 +102,7 @@ stratum_error <- sc_df %>%
   left_join(stratum_freq)
 
 pop_error <- stratum_error %>%
-  group_by(country, poly_size, match, sim, period) %>%
+  group_by(country, poly_size, match, sim) %>%
   summarise(pop_mae = sum(frac_stratum * stratum_mae),
             pop_bias = sum(frac_stratum * stratum_bias),
             n = sum(n_stratum),
@@ -122,7 +122,7 @@ pop_error_viz <- pop_error %>%
   filter(poly_size == 60000 & match == 8) %>%
   ggplot(aes(x = as.factor(sim), y = pop_mae)) +
   geom_point(shape = 18) +
-  geom_hline(aes(yintercept = mean_loss_all, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
+  geom_hline(aes(yintercept = test_loss_all, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
   theme_few() +
   facet_wrap(~country) +
   ylim(0, 0.5) +
@@ -140,32 +140,18 @@ stratum_4_error_viz <- stratum_error %>%
   labs(x = "Simulation", y = "Mean absolute prediction error\n(% of polygon area)", colour = "",
        title = "Upper stratum mean prediction error by simulation")
 
-frac_error_viz <- pop_error %>%
-  filter(poly_size == 60000 & match == 8) %>%
-  pivot_longer(cols = ends_with("mae_frac")) %>%
-  ggplot(aes(x = as.factor(sim), y = value, colour = name)) +
-  geom_point(shape = 18, size = 2) + 
-  scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
-  geom_hline(yintercept = 1, colour = "#F8766D") +
-  theme_few() +
-  facet_wrap(~country) +
-  ylim(0, 1.5) +
-  labs(x = "Simulation", y = "Mean absolute prediction error\n(fraction of mean loss rate)", colour = "",
-       title = "Fractional prediction error by simulation")
-
-# stratum_34_error_viz <- stratum_error %>%
-#   filter(poly_size == 60000 & stratum %in% c(3,4) * match == 8) %>%
-#   group_by(country, sim) %>%
-#   summarise(stratum_mae = weighted.mean(stratum_mae, n_stratum),
-#             stratum_loss = weighted.mean(stratum_loss, n_stratum)) %>%
-#   ggplot(aes(x = as.factor(sim), y = stratum_mae)) +
-#   geom_point(shape = 18) +
-#   geom_hline(aes(yintercept = stratum_loss, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
+# frac_error_viz <- pop_error %>%
+#   filter(poly_size == 60000 & match == 8) %>%
+#   pivot_longer(cols = ends_with("mae_frac")) %>%
+#   ggplot(aes(x = as.factor(sim), y = value, colour = name)) +
+#   geom_point(shape = 18, size = 2) + 
+#   scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
+#   geom_hline(yintercept = 1, colour = "#F8766D") +
 #   theme_few() +
 #   facet_wrap(~country) +
-#   ylim(0, 5) +
-#   labs(x = "Simulation", y = "Mean absolute prediction error\n(% of polygon area)", colour = "",
-#        title = "Upper stratum mean prediction error by simulation")
+#   ylim(0, 1.5) +
+#   labs(x = "Simulation", y = "Mean absolute prediction error\n(fraction of mean loss rate)", colour = "",
+#        title = "Fractional prediction error by simulation")
 
 # Bias plots
 
@@ -191,18 +177,57 @@ stratum_4_bias_viz <- stratum_error %>%
   labs(x = "Simulation", y = "Mean prediction bias\n(% of polygon area)", colour = "",
        title = "Upper stratum mean prediction bias by simulation")
 
-frac_bias_viz <- pop_error %>%
-  filter(poly_size == 60000 & match == 8) %>%
-  pivot_longer(cols = ends_with("bias_frac")) %>%
-  ggplot(aes(x = as.factor(sim), y = value, colour = name)) +
-  geom_point(shape = 18, size = 2) + 
-  scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
-  geom_hline(yintercept = 0, colour = "#F8766D") +
-  theme_few() +
+# frac_bias_viz <- pop_error %>%
+#   filter(poly_size == 60000 & match == 8) %>%
+#   pivot_longer(cols = ends_with("bias_frac")) %>%
+#   ggplot(aes(x = as.factor(sim), y = value, colour = name)) +
+#   geom_point(shape = 18, size = 2) + 
+#   scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
+#   geom_hline(yintercept = 0, colour = "#F8766D") +
+#   theme_few() +
+#   facet_wrap(~country) +
+#   ylim(-1, 1) +
+#   labs(x = "Simulation", y = "Mean prediction bias\n(fraction of mean loss rate)", colour = "",
+#        title = "Fractional prediction bias by simulation")
+
+
+# Boxplots of stratum-level performance range
+
+stratum_error_test <- sc_df %>%
+  filter(match == 8 & poly_size == 60000 & year > START_YEAR) %>%
+  group_by(country, sim, ID, stratum) %>%
+  summarise(mae = mean(abs(sc_loss - loss)),
+            bias = mean(sc_loss - loss),
+            mean_loss = mean(loss)) %>%
+  group_by(country, sim, stratum) %>%
+  mutate(mean_loss = mean(mean_loss))
+
+strata_error_boxplot_sims <- ggplot(stratum_error_test,
+                                    aes(x = as.factor(stratum), y = mae, fill = as.factor(sim))) +
+  geom_boxplot(outlier.size = 0.2) +
+  geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
   facet_wrap(~country) +
-  ylim(-1, 1) +
-  labs(x = "Simulation", y = "Mean prediction bias\n(fraction of mean loss rate)", colour = "",
-       title = "Fractional prediction bias by simulation")
+  theme_bw() +
+  labs(x = "Forest loss bin", y = "Mean absolute prediction error\n(% of polygon area per year)",
+       fill = "Simulation")
+
+strata_bias_boxplot_sims <- ggplot(stratum_error_test,
+                                   aes(x = as.factor(stratum), y = bias, fill = as.factor(sim))) +
+  geom_boxplot(outlier.size = 0.2) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  facet_wrap(~country) +
+  theme_bw() +
+  labs(x = "Forest loss bin", y = "Mean bias\n(% of polygon area per year)",
+       fill = "Simulation")
+
+ggsave("results/figures/boxplots/strata_error_boxplots_by_sim.png",
+       strata_error_boxplot_sims,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/boxplots/strata_bias_boxplots_by_sim.png",
+       strata_bias_boxplot_sims,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
 
 ## Continuous plots of MAE and bias vs. observed forest loss
 
@@ -221,24 +246,22 @@ sc_df_summary <- sc_df %>%
 continuous_viz_bias_loss_country <- sc_df_summary %>%
   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
   ggplot(aes(x = mean_loss_test, y = bias_test)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 0.5, show.legend = FALSE) +
   facet_wrap(~country, scales = "free") +
-  geom_hline(yintercept = 0) +
   # scale_colour_brewer(palette = "Dark2") +
   theme_bw() +
-  labs(title = "By country",
-       x = "Annual forest loss in test period\n(% of polygon area)",
+  labs(x = "Annual forest loss in test period\n(% of polygon area)",
        y = "Bias in test period\n(% of polygon area)")
 
 continuous_viz_bias_loss_global <- sc_df_summary %>%
   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
   ggplot(aes(x = mean_loss_test, y = bias_test)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 0.5) +
-  geom_hline(yintercept = 0) +
   # scale_colour_brewer(palette = "Dark2") +
   theme_bw() +
-  labs(title = "Global",
-       x = "Annual forest loss in test period\n(% of polygon area)",
+  labs(x = "Annual forest loss in test period\n(% of polygon area)",
        y = "Bias in test period\n(% of polygon area)")
 
 continuous_viz_bias_loss_all <- continuous_viz_bias_loss_country +
@@ -247,92 +270,27 @@ continuous_viz_bias_loss_all <- continuous_viz_bias_loss_country +
   
 continuous_viz_bias_loss_all
 
-# Test period bias against matching period forest loss
-
-continuous_viz_bias_matching_loss_country <- sc_df_summary %>%
-  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = mean_loss_matching, y = bias_test, colour = mean_loss_test)) +
-  geom_point(size = 0.5, show.legend = FALSE) +
-  facet_wrap(~country, scales = "free") +
-  geom_hline(yintercept = 0) +
-  scale_colour_viridis_c(option = "A") +
-  theme_bw() +
-  labs(title = "By country",
-       x = "Annual forest loss in matching\nperiod (% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
-
-continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
-  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = mean_loss_matching, y = bias_test, colour = mean_loss_test)) +
-  geom_point(size = 0.5) +
-  geom_hline(yintercept = 0) +
-  scale_colour_viridis_c(option = "A") +
-  theme_bw() +
-  labs(title = "Global",
-       x = "Annual forest loss in matching\nperiod (% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
-
-continuous_viz_bias_matching_loss_all <- continuous_viz_bias_matching_loss_country + 
-  continuous_viz_bias_matching_loss_global +
-  plot_layout(axis_titles = "collect")
-
-continuous_viz_bias_matching_loss_all
-
-# Test period bias against matching period bias
-
-continuous_viz_bias_matching_bias_country <- sc_df_summary %>%
-  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = bias_matching, y = bias_test, colour = mean_loss_test)) +
-  geom_point(size = 0.5, show.legend = FALSE) +
-  facet_wrap(~country, scales = "free") +
-  geom_hline(yintercept = 0) +
-  scale_colour_viridis_c(option = "A") +
-  theme_bw() +
-  labs(title = "By country",
-       x = "Bias in matching period\n(% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
-
-continuous_viz_bias_matching_bias_global <- sc_df_summary %>%
-  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = bias_matching, y = bias_test, colour = mean_loss_test)) +
-  geom_point(size = 0.2) +
-  geom_hline(yintercept = 0) +
-  scale_colour_viridis_c(option = "A") +
-  theme_bw() +
-  labs(title = "Global",
-       x = "Bias in matching period\n(% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
-
-continuous_viz_bias_matching_bias_all <- continuous_viz_bias_matching_bias_country + 
-  continuous_viz_bias_matching_bias_global +
-  plot_layout(axis_titles = "collect")
-
-continuous_viz_bias_matching_bias_all
-
 # MAE vs. test period forest loss
 continuous_viz_mae_loss_country <- sc_df_summary %>%
   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
   ggplot(aes(x = mean_loss_test, y = mae_test)) +
+  geom_abline(intercept = 0, slope = 1, colour = "#F8766D") +
   geom_point(size = 0.5, show.legend = FALSE) +
   facet_wrap(~country, scales = "fixed") +
   xlim(0, 7) + ylim(0, 7) +
-  geom_abline(intercept = 0, slope = 1) +
   # scale_colour_viridis_c(option = "A") +
   theme_bw() +
-  labs(title = "By country",
-       x = "Annual forest loss in test\nperiod (% of polygon area)",
+  labs(x = "Annual forest loss in test\nperiod (% of polygon area)",
        y = "MAE in test period\n(% of polygon area)")
 
 continuous_viz_mae_loss_global <- sc_df_summary %>%
   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
   ggplot(aes(x = mean_loss_test, y = mae_test)) +
+  geom_abline(intercept = 0, slope = 1, colour = "#F8766D") +
   geom_point(size = 0.2) +
-  geom_abline(intercept = 0, slope = 1) +
   xlim(0, 7) + ylim(0, 7) +
-  scale_colour_viridis_c(option = "A") +
   theme_bw() +
-  labs(title = "Global",
-       x = "Annual forest loss in test\nperiod (% of polygon area)",
+  labs(x = "Annual forest loss in test\nperiod (% of polygon area)",
        y = "MAE in test period\n(% of polygon area)")
 
 continuous_viz_mae_loss_all <- continuous_viz_mae_loss_country + 
@@ -341,17 +299,99 @@ continuous_viz_mae_loss_all <- continuous_viz_mae_loss_country +
 
 continuous_viz_mae_loss_all
 
-
-ggsave("results/figures/continuous_viz_bias_loss_all.png",
+ggsave("results/figures/scatter_plots/continuous_viz_bias_loss_all.png",
        continuous_viz_bias_loss_all,
        width = 30, height = 16, units = "cm", dpi = 300)
 
-ggsave("results/figures/continuous_viz_mae_loss_all.png",
+ggsave("results/figures/scatter_plots/continuous_viz_mae_loss_all.png",
        continuous_viz_mae_loss_all,
        width = 30, height = 16, units = "cm", dpi = 300)
 
+continuous_viz_global_mae_bias <- continuous_viz_mae_loss_global +
+  continuous_viz_bias_loss_global +
+  plot_layout(axis_titles = "collect_x")
+
+ggsave("results/figures/scatter_plots/continuous_viz_global_mae_bias.png",
+       continuous_viz_global_mae_bias,
+       width = 30, height = 16, units = "cm", dpi = 300)
 
 
+# Test period bias against matching period forest loss
+
+continuous_viz_bias_matching_loss_country <- sc_df_summary %>%
+  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
+  ggplot(aes(x = mean_loss_matching, y = bias_test)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.5, show.legend = FALSE) +
+  facet_wrap(~country, scales = "free") +
+  theme_bw() +
+  labs(x = "Annual forest loss in matching\nperiod (% of polygon area)",
+       y = "Bias in test period\n(% of polygon area)")
+
+continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
+  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
+  ggplot(aes(x = mean_loss_matching, y = bias_test)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.5) +
+  theme_bw() +
+  labs(x = "Annual forest loss in matching\nperiod (% of polygon area)",
+       y = "Bias in test period\n(% of polygon area)")
+
+continuous_viz_bias_matching_loss_all <- continuous_viz_bias_matching_loss_country + 
+  continuous_viz_bias_matching_loss_global +
+  plot_layout(axis_titles = "collect")
+
+continuous_viz_bias_matching_loss_all
+
+# continuous_viz_mae_matching_loss_global <- sc_df_summary %>%
+#   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
+#   ggplot(aes(x = mean_loss_matching, y = mae_test)) +
+#   geom_point(size = 0.5) +
+#   # geom_hline(yintercept = 0, colour = "#F8766D") +
+#   theme_bw() +
+#   labs(x = "Annual forest loss in matching\nperiod (% of polygon area)",
+#        y = "Mean absolute error in test period\n(% of polygon area)")
+
+# Test period bias against matching period bias
+
+continuous_viz_bias_matching_bias_country <- sc_df_summary %>%
+  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
+  ggplot(aes(x = bias_matching, y = bias_test)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.5, show.legend = FALSE) +
+  facet_wrap(~country, scales = "free") +
+  theme_bw() +
+  labs(x = "Bias in matching period\n(% of polygon area)",
+       y = "Bias in test period\n(% of polygon area)")
+
+continuous_viz_bias_matching_bias_global <- sc_df_summary %>%
+  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
+  ggplot(aes(x = bias_matching, y = bias_test)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_vline(xintercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.2) +
+  scale_x_reverse() +
+  theme_bw() +
+  labs(x = "Bias in matching period\n(% of polygon area)",
+       y = "Bias in test period\n(% of polygon area)")
+
+continuous_viz_bias_matching_bias_all <- continuous_viz_bias_matching_bias_country + 
+  continuous_viz_bias_matching_bias_global +
+  plot_layout(axis_titles = "collect")
+
+continuous_viz_bias_matching_bias_all
+
+continuous_viz_bias_global_predictors <- continuous_viz_bias_matching_loss_global +
+  continuous_viz_bias_matching_bias_global +
+  plot_layout(axis_titles = "collect_y")
+
+continuous_viz_bias_global_predictors
+
+ggsave("results/figures/scatter_plots/continous_test_bias_vs_predictors.png",
+       continuous_viz_bias_global_predictors,
+       width = 30, height = 16, units = "cm", dpi = 300)
+
+## Plot population and stratum summary figs
 
 ggsave("results/figures/mae_by_country_population.png",
        pop_error_viz,
@@ -384,12 +424,6 @@ ggsave("results/figures/mae_by_mean_loss_rate_global.png",
 ggsave("results/figures/frac_mae_by_mean_loss_rate_global.png",
        continuous_viz_frac,
        width = 24, height = 16, units = "cm", dpi = 300)
-
-## IDEA - also visualise ratio between matching period MAE/bias and test period MAE/bias
-## (i.e., how well does matching period performance predict test period?)
-
-## IDEA - go back and re-run analysis for just covariates and with long matching
-## periods (16-24 years). This might improve performance relative to only 8 years.
 
 ### 4. Visualise SC trajectories --------
 
@@ -600,20 +634,50 @@ frac_error_poly_viz <- pop_error %>%
   labs(x = "polygon size", y = "Mean absolute prediction error\n(fraction of mean loss rate)", colour = "",
        title = "Fractional prediction error by polygon size")
 
-# stratum_34_error_viz <- stratum_error %>%
-#   filter(match == 8 & stratum %in% c(3,4) * match == 8) %>%
-#   group_by(country, sim) %>%
-#   summarise(stratum_mae = weighted.mean(stratum_mae, n_stratum),
-#             stratum_loss = weighted.mean(stratum_loss, n_stratum)) %>%
-#   ggplot(aes(x = as.factor(sim), y = stratum_mae)) +
-#   geom_point(shape = 18) +
-#   geom_hline(aes(yintercept = stratum_loss, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
-#   theme_few() +
-#   facet_wrap(~country) +
-#   ylim(0, 5) +
-#   scale_x_continuous(breaks = seq(0, 24, 4)) +
-#   labs(x = "polygon size", y = "Mean absolute prediction error\n(% of polygon area)", colour = "",
-#        title = "Upper stratum mean prediction error by simulation")
+# Boxplots of performance range by polygon size
+
+stratum_error_test_poly_size <- sc_df %>%
+  filter(match == 8 & sim == 5 & year > START_YEAR) %>%
+  group_by(country, poly_size, ID, stratum) %>%
+  summarise(mae = mean(abs(sc_loss - loss)),
+            bias = mean(sc_loss - loss),
+            mean_loss = mean(loss)) %>%
+  group_by(country, poly_size, stratum) %>%
+  mutate(mean_loss = mean(mean_loss))
+
+strata_error_boxplot_poly_size <- stratum_error_test_poly_size %>%
+  mutate(poly_size = ordered(paste0(poly_size / 1000, "k"),
+                             levels = c("10k", "60k", "600k"))) %>%
+  ggplot(aes(x = as.factor(stratum), y = mae, fill = as.factor(poly_size))) +
+  geom_boxplot(outlier.size = 0.2) +
+  # geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
+  facet_wrap(~country) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_bw() +
+  labs(x = "Forest loss bin", y = "Mean absolute prediction error\n(% of polygon area per year)",
+       fill = "Polygon size")
+
+strata_bias_boxplot_poly_size <- stratum_error_test_poly_size %>%
+  mutate(poly_size = ordered(paste0(poly_size / 1000, "k"),
+                             levels = c("10k", "60k", "600k"))) %>%
+  ggplot(aes(x = as.factor(stratum), y = bias, fill = as.factor(poly_size))) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_boxplot(outlier.size = 0.2) +
+  # geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
+  facet_wrap(~country) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_bw() +
+  labs(x = "Forest loss bin", y = "Mean bias\n(% of polygon area per year)",
+       fill = "Polygon size")
+
+ggsave("results/figures/boxplots/mae_boxplot_by_poly_size.png",
+       strata_error_boxplot_poly_size,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/boxplots/bias_boxplot_by_poly_size.png",
+       strata_bias_boxplot_poly_size,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
 
 # Bias plots
 
@@ -717,19 +781,21 @@ defor_long_rq4 <- defor_rq4 %>%
 defor_long_loss_rq4 <- defor_long_rq4 %>%
   filter(year > RQ4_START_YEAR) %>%
   group_by(country, ID) %>%
-  summarise(mean_loss = mean(loss) * 100) %>%
+  mutate(mean_loss = mean(loss) * 100) %>%
   group_by(country) %>%
   mutate(stratum = cut_interval(mean_loss, n = 4, labels = FALSE)) %>%
   group_by(country, stratum)
 
 # Calculate relative frequency of strata for each country and polygon size
 stratum_freq_rq4 <- defor_long_loss_rq4 %>%
-  group_by(country) %>%
+  group_by(country, year) %>%
   mutate(n = n(),
+         mean_loss_year = mean(loss) * 100,
          mean_loss_all = mean(mean_loss)) %>%
-  group_by(country, stratum) %>%
+  group_by(country, stratum, year) %>%
   summarise(n_stratum = n(),
             frac_stratum = n_stratum / mean(n),
+            mean_loss_year = mean(mean_loss_year),
             mean_loss_all = mean(mean_loss_all),
             stratum_loss = mean(mean_loss)) 
 
@@ -743,13 +809,14 @@ stratum_error_rq4 <- sc_df_rq4 %>%
   group_by(country, stratum, year) %>%
   summarise(stratum_mae = mean(mae),
             stratum_bias = mean(mean_bias)) %>%
-  left_join(stratum_freq)
+  left_join(stratum_freq_rq4)
 
 pop_error_rq4 <- stratum_error_rq4 %>%
   group_by(country, year) %>%
   summarise(pop_mae = sum(frac_stratum * stratum_mae),
             pop_bias = sum(frac_stratum * stratum_bias),
             n = sum(n_stratum),
+            mean_loss_year = mean(mean_loss_year),
             mean_loss_all = mean(mean_loss_all),
             pop_mae_frac = pop_mae / mean_loss_all,
             pop_bias_frac = pop_bias / mean_loss_all,
@@ -761,53 +828,54 @@ pop_error_rq4 <- stratum_error_rq4 %>%
             s4_bias_frac = s4_bias / s4_loss)
 
 
-frac_error_rq4_viz <- pop_error_rq4 %>%
-  pivot_longer(cols = ends_with("mae")) %>%
-  ggplot(aes(x = year, y = value, colour = name)) +
-  geom_line() + 
-  scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
-  # geom_hline(yintercept = 1, colour = "#F8766D") +
-  theme_few() +
-  facet_wrap(~country) +
-  # ylim(0, 1.5) +
-  labs(x = "polygon size", y = "Mean absolute prediction error\n(fraction of mean loss rate)", colour = "",
-       title = "Fractional prediction error by polygon size")
-
 pop_error_rq4_viz <- pop_error_rq4 %>%
   ggplot(aes(x = year, y = pop_mae)) +
-  geom_line() +
-  geom_hline(aes(yintercept = mean_loss_all, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
+  geom_line(aes(colour = "Mean absolute\nprediction error")) +
+  geom_line(aes(y = mean_loss_year, colour = "Mean forest\nloss rate")) +
   theme_few() +
   facet_wrap(~country) +
-  # ylim(0, 0.5) +
-  # scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Year", y = "Mean absolute prediction error\n(% of polygon area)", colour = "",
+  scale_colour_manual(values = c("black", "#F8766D")) +
+  labs(x = "Year", y = "% of polygon area", colour = "",
        title = "Population-level mean prediction error over test period")
 
-stratum_4_error_rq4_viz <- stratum_error_rq4 %>%
-  filter(stratum == 4) %>%
-  ggplot(aes(x = year, y = stratum_mae)) +
-  geom_line() +
-  geom_hline(aes(yintercept = stratum_loss, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
+s4_error_rq4_viz <- pop_error_rq4 %>%
+  ggplot(aes(x = year, y = s4_mae)) +
+  geom_line(aes(colour = "Mean absolute\nprediction error")) +
+  geom_line(aes(y = mean_loss_year, colour = "Mean forest\nloss rate")) +
   theme_few() +
   facet_wrap(~country) +
-  # ylim(0, 8) +
-  # scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Year", y = "Mean absolute prediction error\n(% of polygon area)", colour = "",
-       title = "Upper stratum mean prediction error over test period")
+  scale_colour_manual(values = c("black", "#F8766D")) +
+  labs(x = "Year", y = "% of polygon area", colour = "",
+       title = "Upper bin mean prediction error over test period")
 
-frac_error_rq4_viz <- pop_error_rq4 %>%
-  pivot_longer(cols = ends_with("mae_frac")) %>%
-  ggplot(aes(x = year, y = value, colour = name)) +
-  geom_line() + 
-  scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
+annual_frac_error_rq4_viz <- pop_error_rq4 %>%
+  mutate(pop_frac_mae = pop_mae / mean_loss_year,
+         s4_frac_mae = s4_mae / mean_loss_year) %>%
+  ggplot(aes(x = year)) +
+  geom_line(aes(y = pop_frac_mae, colour = "Population")) +
+  geom_line(aes(y = s4_frac_mae, colour = "Upper bin")) +
+  geom_hline(yintercept = 1, colour = "grey30") +
+  theme_few() +
+  facet_wrap(~country) +
+  labs(x = "Year",
+       y = "Mean absolute prediction error\n(fraction of mean annual deforestation rate)",
+       colour = "")
+
+# Version 2 of above
+
+annual_frac_error_rq4_viz <- pop_error_rq4 %>%
+  mutate(pop_frac_mae = pop_mae / mean_loss_year,
+         s4_frac_mae = s4_mae / mean_loss_year) %>%
+  ggplot(aes(x = year)) +
+  geom_line(aes(y = pop_frac_mae)) +
+  # geom_line(aes(y = s4_frac_mae, colour = "Upper bin")) +
   geom_hline(yintercept = 1, colour = "#F8766D") +
   theme_few() +
   facet_wrap(~country) +
-  # ylim(0, 1.5) +
-  # scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Year", y = "Mean absolute prediction error\n(fraction of mean loss rate)", colour = "",
-       title = "Fractional prediction error over test period")
+  labs(x = "Year",
+       y = "Mean absolute prediction error\n(fraction of mean annual deforestation rate)",
+       title = "Population fraction")
+
 
 
 ggsave("results/figures/mae_by_country_population_rq4.png",
@@ -815,9 +883,9 @@ ggsave("results/figures/mae_by_country_population_rq4.png",
        width = 24, height = 16, units = "cm", dpi = 300)
 
 ggsave("results/figures/mae_by_country_s4_rq4.png",
-       stratum_4_error_rq4_viz,
+       s4_error_rq4_viz,
        width = 24, height = 16, units = "cm", dpi = 300)
 
-ggsave("results/figures/mae_by_country_frac_rq4.png",
-       frac_error_rq4_viz,
+ggsave("results/figures/mae_by_country_frac_annual_rq4.png",
+       annual_frac_error_rq4_viz,
        width = 24, height = 16, units = "cm", dpi = 300)

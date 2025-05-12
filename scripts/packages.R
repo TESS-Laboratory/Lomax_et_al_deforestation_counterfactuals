@@ -13,6 +13,7 @@ library(stringr)
 library(magrittr)
 library(purrr)
 library(ggplot2)
+library(scales)
 library(units)
 library(stringi)
 
@@ -30,6 +31,7 @@ library(furrr)
 library(tmap)
 library(ggplot2)
 library(patchwork)
+library(ggthemes)
 
 # workflow utilities
 library(tictoc)
