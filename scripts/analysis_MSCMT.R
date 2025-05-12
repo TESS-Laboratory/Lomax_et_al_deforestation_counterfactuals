@@ -15,7 +15,7 @@ SIMULATIONS <- 5  # Simulations to run
 ECON <- TRUE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 100  # Max number of potential donor polygons to constrain 
-N_CORES <- 16
+N_CORES <- 8
 
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
@@ -74,7 +74,9 @@ sc_results <- future_map(sample_ids$ID, .options = furrr_options(seed = TRUE), .
     add_dist_to_treated(id) %>%
     st_drop_geometry() %>%
     add_shared_eco_frac(id) %>%
-    add_biome_match(id, drop = TRUE)
+    add_biome_match(id, drop = TRUE) %>%
+    select(-stratum, -cum_loss) %>%
+    drop_na()  # Remove donors with NA values in key variables
   
   # Prepare data to format required by augsynth
   
@@ -90,7 +92,7 @@ sc_results <- future_map(sample_ids$ID, .options = furrr_options(seed = TRUE), .
     stratum = sample_ids$stratum[sample_ids$ID == id],
     match = MATCHING_PERIOD
   ) %>%
-    mutate(synth = map2(id, match, run_synthetic_control_mscmt, data = grid_data_prepared))
+    mutate(synth = map(id, run_synthetic_control_mscmt, match = MATCHING_PERIOD, data = grid_data_prepared))
     
   sim_df
 })
