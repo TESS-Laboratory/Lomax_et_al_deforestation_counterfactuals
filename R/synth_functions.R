@@ -384,3 +384,26 @@ extract_synth_importance <- function(synth) {
      v
    }
 }
+
+
+#' @title Join results csvs
+#' @description Combines results csv files for each country into a single df
+#' 
+#' @usage join_results(country, folder, match)
+#' 
+#' @param folder character. The folder path
+#' @param match character. The unique string identifying SC results
+
+join_results <- function(country, folder) {
+
+  filepaths <- paste0(folder, "/sc_results_", country, "_2016_60000",
+                      c("", "_extended", "_S6"), ".csv")
+  
+  df_joined <- filepaths %>%
+    map(read_csv) %>%
+    bind_rows()
+  
+  write_csv(df_joined, paste0(folder, "/joined/sc_results_", country, "_2016_60000.csv"))
+ 
+}
+

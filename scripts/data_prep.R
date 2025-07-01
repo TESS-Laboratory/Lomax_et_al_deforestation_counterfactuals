@@ -6,7 +6,7 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Spatial and temporal range
-COUNTRY <- "Bolivia"  # Target country
+COUNTRY <- "Cote d'Ivoire"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
 
