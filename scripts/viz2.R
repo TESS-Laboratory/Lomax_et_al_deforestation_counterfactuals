@@ -19,13 +19,16 @@ START_YEAR <- 2016  # Simulated start year of protection project
 RQ4_START_YEAR <- 1998  # Simulated start year for RQ4 simulations
 POLY_SIZE <- c(10000, 60000, 600000) # size of polygons in hectares
 VIZ_SEED <- 111
+CUMULATIVE <- TRUE
 
 ### 2. Load data --------
 
 # SC results by country
+cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
+
 sc_df <- map(COUNTRIES, function(country) {
   country_df <- map(POLY_SIZE, function(size) {
-    filename <- paste0("sc_results_", country, "_", START_YEAR, "_", size, ".csv")
+    filename <- paste0("sc_results_", country, "_", START_YEAR, "_", size, cumulative_flag, ".csv")
     if(file.exists(paste0("results/sc_results/", filename))) {
       df <- read_csv(paste0("results/sc_results/", filename)) %>%
         mutate(poly_size = size)
@@ -436,13 +439,13 @@ ggsave("results/figures/frac_mae_by_mean_loss_rate_global.png",
 
 set.seed(VIZ_SEED)
 sc_sample <- sc_df %>%
-  filter(match == 8 & poly_size == 60000) %>%
+  filter(match == 8 & poly_size == 60000 & sim %in% c(1, 6)) %>%
   group_by(country, ID) %>%
   summarise(ID_all = cur_group_id(),
             mean_loss = mean(loss)) %>%
   group_by(country) %>%
   arrange(desc(mean_loss), .by_group = TRUE) %>%
-  slice_head(n = 6) %>%
+  slice_sample(n = 6) %>%
   mutate(country_id = 1:n()) %>%
   left_join(sc_df) %>%
   mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
@@ -462,6 +465,8 @@ ts_plots <- sc_sample %>%
     values = c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00', "black")) +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
         strip.text = element_text(face = "bold"))
+
+ts_plots
 
 ts_plots_s5 <- sc_sample %>%
   group_by(country) %>%
