@@ -9,16 +9,17 @@ source("scripts/load.R")
 # Data selection
 COUNTRY <- "Cote d'Ivoire"  # Target country
 START_YEAR <- 2016 # Simulated start year of protection project
-MATCHING_PERIODS <- seq(4, 24, 4)  # Length of pre-intervention period to use for matching (years)
+MATCHING_PERIODS <- seq(4, 12, 4)  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
 SIMULATIONS <- 1:6  # Simulations to run
 ECON <- FALSE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
 N_CORES <- 1
+CUMULATIVE <- TRUE  # Use cumulative rather than annual deforestation to fit
 
 # Simulations to run for RQ1 and RQ3
-if (POLY_SIZE <- 60000) {
+if (POLY_SIZE == 60000) {
   simulation_match_df <- read_csv("data/raw/csv/simulation_list_60000.csv")
 } else {
   simulation_match_df <- tibble(sim = 5, match = 8)
@@ -29,12 +30,13 @@ simulation_match_df <- filter(simulation_match_df, sim %in% SIMULATIONS)
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
-if (length(cmd_args) == 5) {
+if (length(cmd_args) == 6) {
   COUNTRY <- cmd_args[1]
   POLY_SIZE <- as.numeric(cmd_args[2])
   MAX_POOL <- as.numeric(cmd_args[3])
   N_CORES <- as.numeric(cmd_args[4])
   ECON <- as.logical(as.numeric(cmd_args[5]))
+  CUMULATIVE <- as.logical(as.numeric(cmd_args[6]))
 } else {
   print("Insufficient command line arguments given - using default values")
 }
@@ -72,8 +74,6 @@ if (nrow(grid_data) > MAX_POOL) {
   grid_data <- bind_rows(grid_data_sample, grid_data_pool)
 }
 
-# Set up formula for analysis based on simulation type
-
 # Loop through sample to perform analysis
 Sys.time()
 tic()
@@ -102,7 +102,7 @@ sc_results <- future_map(sample_ids$ID, function(id) {
     mutate(ID = id,
            stratum = sample_ids$stratum[sample_ids$ID == id]
     ) %>%
-    mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared, econ = ECON))
+    mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared, econ = ECON, cumulative = CUMULATIVE))
 
   sim_df
 },
@@ -112,16 +112,18 @@ toc()
 
 ### 4. Combine results and export data
 
-# Convert back to time series of observed and modelled forest loss for each unit
+# Convert back to time series of observed and modeled forest loss for each unit
 
 sc_df <- sc_results %>%
   bind_rows() %>%
   filter(!is.na(synth)) %>%
-  mutate(sc_results = map2(synth, ID, extract_synth)) %>%
+  mutate(sc_results = map2(synth, ID, extract_synth, cumulative = CUMULATIVE)) %>%
   select(-synth) %>%
   unnest(sc_results)
 
-output_filename <- paste0("sc_results_", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, ".csv")
+cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
+
+output_filename <- paste0("sc_results_", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, cumulative_flag, ".csv")
 
 write_csv(sc_df, paste0("results/sc_results/", output_filename))
 

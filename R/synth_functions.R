@@ -183,12 +183,16 @@ get_formula <- function(sim, econ = TRUE) {
 #' @param outcome_ts numeric. A vector or column name containing the outcomes
 #' @param pt numeric. The number of pre-treatment periods before project start
 
-prepare_outcomes <- function(sim, outcome_ts, pt) {
+prepare_outcomes <- function(sim, outcome_ts, pt, cumulative) {
+  
+  if (cumulative == TRUE) {
+    outcome_ts <- cumsum(outcome_ts)
+  }
   
   if (sim == 3) {
     outcome_ts[1:pt] <- 0
   } else if (sim %in% c(2, 4, 5)) {
-    outcome_ts[pt] <- mean(outcome_ts[1:pt])
+    outcome_ts[pt] <- ifelse(cumulative == TRUE, last(outcome_ts[1:pt]), mean(outcome_ts[1:pt]))
     outcome_ts[1:(pt-1)] <- 0
   }
   
@@ -205,9 +209,13 @@ prepare_outcomes <- function(sim, outcome_ts, pt) {
 #' @param sim integer. The desired simulation number
 #' @param data a data.frame containing input data
 #' @param out_model character. The outcome model to use (see `augsynth` function)
+#' @param econ logical. Does the dataset include economic variables?
+#' @param cumulative logical. Fit synthetic control to cumulative (rather than annual)
+#' forest loss outcomes?
+#' @param out_model outcome model to impute control outcomes
 #' @param ... Other arguments to pass to prepare_outcomes()
 
-run_synthetic_control <- function(sim, match, data, econ = TRUE, out_model = "Ridge") {
+run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FALSE, out_model = "Ridge") {
   
   formula <- get_formula(sim, econ = econ)
   
@@ -223,7 +231,9 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, out_model = "Ri
   
   data_prepared <- data %>%
     filter(year > (START_YEAR - match)) %>%
-    mutate(loss = prepare_outcomes(sim, loss, pt = match))
+    group_by(ID) %>%
+    mutate(loss = prepare_outcomes(sim, loss, pt = match, cumulative = cumulative)) %>%
+    ungroup()
   
   augsynth_safe <- possibly(augsynth, otherwise = NA, quiet = FALSE)
   
@@ -348,7 +358,7 @@ extract_synth_error <- function(synth, ts = FALSE) {
 #' @param synth an augsynth object
 #' @param id numeric. The polygon ID of the treated unit for a given synth
 
-extract_synth <- function(synth, id) {
+extract_synth <- function(synth, id, truth_data, cumulative = FALSE) {
   
   start_year <- synth$data$time %>%
     as.numeric() %>%
@@ -360,6 +370,12 @@ extract_synth <- function(synth, id) {
     filter(ID == id & year >= start_year) %>%
     select(year, loss) %>%
     mutate(sc_loss = predict(synth))
+  
+  if (cumulative == TRUE) {
+    results_df <- results_df %>%
+      group_by()
+      mutate(loss = cumsum(loss))
+  }
   
   results_df
 }
