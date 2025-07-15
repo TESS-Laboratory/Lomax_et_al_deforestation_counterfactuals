@@ -112,11 +112,3 @@ write_csv(variable_importance_df,
 
 message("Written to disk: ", COUNTRY, "_importance.csv")
 pushover(paste0("Variable importance analysis completed: ", COUNTRY))
-
-###
-
-var_importance <- read_csv(paste0("results/var_importance/Bolivia_importance.csv"))
-
-var_importance_all <- var_importance %>%
-  group_by(variable) %>%
-  summarise(mean = mean(min.loss.w))

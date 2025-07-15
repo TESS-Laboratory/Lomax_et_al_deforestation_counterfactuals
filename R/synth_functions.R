@@ -266,7 +266,7 @@ run_synthetic_control_mscmt <- function(id, match, data) {
   match2 <- match - 1
   
   data_prepared <- data %>%
-    # filter(year > (START_YEAR - match)) %>%
+    filter(year > (START_YEAR - match)) %>%
     mutate(name = paste0("ID", as.character(ID))) %>%
     as.data.frame()
   
