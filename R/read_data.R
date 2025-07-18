@@ -34,6 +34,11 @@ get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = 
     
     sf_combined <- st_filter(sf_combined, poly_transform)
   }
+  
+  if(sum(st_is(st_geometry(sf_combined), "GEOMETRYCOLLECTION")) > 0) {
+    message("Unpacking geometry collections")
+    sf_combined <- st_collection_extract(sf_combined)
+  }
 
   sf_combined
     
@@ -91,6 +96,11 @@ get_raster <- function(folder, match = NULL, names = NULL, ext = ".tif", source 
   
   if (!is.null(match)) {
     match <- data_lookup[data_lookup$country == match,][[source]]
+    
+    if (length(match) == 0) {
+      stop("No files found matching string pattern")
+    }
+    
     file_paths <- Sys.glob(paste0(folder, "/*", match, "*", ext, "*"))
     
   } else {
@@ -126,7 +136,7 @@ get_tiled_raster <- function(folder, match = NULL, layer = NULL, names = NULL, e
     file_paths <- Sys.glob(paste0(folder, "/*", ext, "*"))
   }
   
-  # Create virtual raster
+  # Create virtual raster 
   vrt <- vrt(file_paths)
   
   # Subset and/or rename layers
@@ -156,33 +166,93 @@ get_tiled_raster <- function(folder, match = NULL, layer = NULL, names = NULL, e
 #' @param folder character. Then name of the output folder in "data/raw/raster/"
 #' 
 
-get_stac_raster <- function(collection, asset, aoi = country, filename = COUNTRY, folder = NULL, names = NULL) {
+get_stac_raster <- function(aoi = country, filename = COUNTRY, collection, asset, folder = NULL, names = NULL, tile = 1) {
   
   if(is.null(folder)) {
     folder <- collection
   }
   
-  filepath <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
-
-  if (!file.exists(filepath)) {
-    message("File not detected. Downloading from STAC.")
-    filepath <- rsi::get_stac_data(
-      aoi = aoi,
-      start_date = "2000-01-01",  end_date = "2024-01-01",
-      asset_names = asset,
-      collection = collection,
-      stac_source = "https://planetarycomputer.microsoft.com/api/stac/v1/",
-      output_filename = filepath,
-    )
-  } else {
-    message("File detected. Loading from disk.")
-  }
+  if (tile > 1) {
+    aoi_grid <- aoi %>%
+      st_make_grid(n = tile) %>%
+      map(st_sfc, crs = st_crs(aoi))
+    
+    aoi <- aoi_grid[which(unlist(map(aoi_grid, st_intersects, y = aoi, sparse = FALSE)))]
+    
+    filename <- paste0(filename, "_", 1:length(aoi))
   
-  raster <- rast(filepath)
+    filepaths <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
+  
+    if (!all(file.exists(filepaths))) {
+      message("Files not detected. Downloading from STAC...")
+      
+      get_stac_mappable <- function(aoi, output_filename, ...) {
+        message("Getting data: ", output_filename)
+        get_stac_data(aoi = aoi, output_filename = output_filename, ...)
+      }
+      
+      filepaths <- map2(
+        aoi, 
+        filepaths, 
+        get_stac_mappable,
+        start_date = "2000-01-01",  end_date = "2024-01-01",
+        asset_names = asset,
+        collection = collection,
+        stac_source = "https://planetarycomputer.microsoft.com/api/stac/v1/"
+      ) %>% unlist()
+    } else {
+      
+    message("All files detected. Loading from disk.")
+    
+    }
+    
+    raster <- vrt(filepaths)
+    
+  } else {
+    filepath <- paste0("data/raw/raster/", folder, "/", filename, ".tif")
+    
+    if (!file.exists(filepath)) {
+      message("File not detected. Downloading from STAC...")
+      filepath <- get_stac_data(
+        aoi = country,
+        start_date = "2000-01-01", end_date = "2024-01-01",
+        asset_names = asset,
+        collection = collection,
+        stac_source = "https://planetarycomputer.microsoft.com/api/stac/v1/",
+        output_filename = filepath
+      )
+    } else {
+      
+      message("File detected. Loading from disk.")
+    
+    }
+    
+    raster <- rast(filepath)
+    
+  }
   
   if (!is.null(names)) {
     names(raster) <- names
-  }
+  }  
   
   raster
+
+}
+
+
+#' @title Simplify string
+#' @description Converts character strings to lower case ASCII text to reduce
+#' issues with joining data frames from different datasets.
+#' 
+#' @usage simplify_string(x)
+#' 
+#' @param x character vector
+
+simplify_string <- function(x) {
+  
+  output_x <- x %>%
+    tolower() %>%
+    stri_trans_general(id = "Latin-ASCII")
+  
+  output_x
 }

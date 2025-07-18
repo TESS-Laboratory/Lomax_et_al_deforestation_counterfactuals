@@ -7,40 +7,24 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Malaysia"  # Target country
-START_YEAR <- 1998 # Simulated start year of protection project
-MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
+COUNTRY <- "Bolivia"  # Target country
+START_YEAR <- 2016 # Simulated start year of protection project
+MATCHING_PERIOD <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-SIMULATIONS <- c(1, 5, 6)  # Simulations to run
+SIMULATIONS <- 5  # Simulations to run
 ECON <- TRUE  # Economic data present for country
 SEED <- 1471
-MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
-N_CORES <- 1
-CUMULATIVE <- FALSE  # Use cumulative rather than annual deforestation to fit
-
-# Simulations to run for RQ1 and RQ3
-if (START_YEAR == 2016) {
-  if (POLY_SIZE == 60000) {
-    simulation_match_df <- read_csv("data/raw/csv/simulation_list_60000.csv")
-  } else {
-    simulation_match_df <- tibble(sim = 5, match = 8)
-  }
-} else if (START_YEAR == 1998) {
-  simulation_match_df <- tibble(sim = SIMULATIONS, match = 8)
-}
-
-simulation_match_df <- filter(simulation_match_df, sim %in% SIMULATIONS)
+MAX_POOL <- 100  # Max number of potential donor polygons to constrain 
+N_CORES <- 8
 
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
-if (length(cmd_args) == 6) {
+if (length(cmd_args) == 4) {
   COUNTRY <- cmd_args[1]
-  POLY_SIZE <- as.numeric(cmd_args[2])
-  MAX_POOL <- as.numeric(cmd_args[3])
-  N_CORES <- as.numeric(cmd_args[4])
-  ECON <- as.logical(as.numeric(cmd_args[5]))
-  CUMULATIVE <- as.logical(as.numeric(cmd_args[6]))
+  MAX_POOL <- as.numeric(cmd_args[2])
+  N_CORES <- as.numeric(cmd_args[3])
+  ECON <- as.logical(as.numeric(cmd_args[4]))
 } else {
   print("Insufficient command line arguments given - using default values")
 }
@@ -53,6 +37,8 @@ if (N_CORES > 1) {
 }
 
 ### 2. Load data
+## To fix tomorrow - now have the geoms attached to grid_data, which is in wide format
+## so need to extract them and then again pivot_longer and separate_wider_delim...
 grid_data <- read_rds(paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
 
 ### 3. Prepare data and run analysis
@@ -79,9 +65,8 @@ if (nrow(grid_data) > MAX_POOL) {
 }
 
 # Loop through sample to perform analysis
-Sys.time()
-tic()
-sc_results <- future_map(sample_ids$ID, function(id) {
+set.seed(SEED)
+sc_results <- future_map(sample_ids$ID, .options = furrr_options(seed = TRUE), .progress = TRUE, function(id) {
   
   # Add additional variables specific to treated unit
   grid_data_sample <- grid_data %>%
@@ -102,36 +87,28 @@ sc_results <- future_map(sample_ids$ID, function(id) {
   # Run synthetic controls for different simulations
   
   message("Fitting synthetic control: ID = ", id)
-  sim_df <- simulation_match_df %>%
-    mutate(ID = id,
-           stratum = sample_ids$stratum[sample_ids$ID == id]
-    ) %>%
-    mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared, econ = ECON, cumulative = CUMULATIVE))
-
+  sim_df <- tibble(
+    ID = id,
+    stratum = sample_ids$stratum[sample_ids$ID == id],
+    match = MATCHING_PERIOD
+  ) %>%
+    mutate(synth = map(id, run_synthetic_control_mscmt, match = MATCHING_PERIOD, data = grid_data_prepared))
+    
   sim_df
-},
-.options = furrr_options(seed = TRUE, packages = c("augsynth", "dplyr", "purrr", "sf")),
-.progress = TRUE)
-toc()
+})
 
-### 4. Combine results and export data
+### 4. Combine results and summarise data
 
-# Convert back to time series of observed and modeled forest loss for each unit
+# Convert back to time series of observed and modelled forest loss for each unit
 
-sc_df <- sc_results %>%
+variable_importance_df <- sc_results %>%
   bind_rows() %>%
-  filter(!is.na(synth)) %>%
-  mutate(sc_results = map2(synth, ID, extract_synth, cumulative = CUMULATIVE)) %>%
+  mutate(sc_results = map(synth, extract_synth_importance)) %>%
   select(-synth) %>%
   unnest(sc_results)
 
-cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
+write_csv(variable_importance_df,
+          paste0("results/var_importance/", COUNTRY, "_importance.csv"))
 
-output_filename <- paste0("sc_results_", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, cumulative_flag, ".csv")
-
-write_csv(sc_df, paste0("results/sc_results/", output_filename))
-
-cat("Results written to ", output_filename)
-
-pushover(message = paste0("SC analysis complete: ", COUNTRY, ". Start year: ", START_YEAR))
-
+message("Written to disk: ", COUNTRY, "_importance.csv")
+pushover(paste0("Variable importance analysis completed: ", COUNTRY))

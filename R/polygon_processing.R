@@ -255,11 +255,14 @@ rasterize_lines <- function(lines, target, other = NA) {
 filter_disjoint <- function(x, y) {
   
   if (nrow(y) > 0) {
-    y_union <- y %>%
-      st_collection_extract() %>%
-      st_union()
+    # y_union <- y %>%
+    #   # st_collection_extract() %>%
+    #   st_union()
     
-    x_filtered <- st_filter(x, y_union, .predicate = st_disjoint)
+    x_intersects <- st_filter(x, y) %>%
+      st_drop_geometry()
+    
+    x_filtered <- anti_join(x, x_intersects, by = "ID")
   } else {
     x_filtered <- x
   }

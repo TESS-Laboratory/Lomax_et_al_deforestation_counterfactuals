@@ -1,15 +1,10 @@
 # Ignore all these
-
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
-
 data/*
 results/
-
+*.out
 # Except these files
-
 !data/REDD_database.xlsx
-!data/REDD_database_no_meta.csv
-!data/REDD_proj_by_country.csv
