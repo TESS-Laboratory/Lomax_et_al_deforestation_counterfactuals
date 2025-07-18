@@ -471,7 +471,7 @@ stratum_4_sim_bias_viz <- stratum_error %>%
 importance_viz_country <- importance_df %>%
   group_by(country, variable) %>%
   summarise(mean_weight = mean(min.loss.w)) %>%
-  ggplot(aes(x = mean_weight, y = reorder(variable, mean_weight)) +
+  ggplot(aes(x = mean_weight, y = reorder(variable, mean_weight))) +
   geom_col() +
   facet_wrap(~country) +
   theme_bw()
@@ -505,134 +505,7 @@ importance_viz_country_boxplot_s34 <- importance_df %>%
   facet_wrap(~country) +
   theme_classic()
 
-## 7. RQ3 - Mean absolute error by match period --------
-
-pop_error_match_viz <- pop_error %>%
-  filter(poly_size == 60000 & sim == 1) %>%
-  ggplot(aes(x = match, y = pop_mae)) +
-  geom_line() +
-  # geom_hline(aes(yintercept = mean_loss_all, colour = "Mean forest\nloss rate\n(% of polygon\narea)")) +
-  theme_few() +
-  facet_wrap(~country) +
-  ylim(0, 0.5) +
-  scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean absolute prediction error\n(% of project area)", colour = "",
-       title = "Population-level mean prediction error by matching period")
-
-stratum_4_error_match_viz <- stratum_error %>%
-  filter(poly_size == 60000 & stratum == 4 & sim == 1) %>%
-  ggplot(aes(x = match, y = stratum_mae)) +
-  geom_line() +
-  geom_hline(aes(yintercept = stratum_loss, colour = "Mean forest\nloss rate\n(% of project\narea)")) +
-  theme_few() +
-  facet_wrap(~country) +
-  ylim(0, 8) +
-  scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean absolute prediction error\n(% of polygon area)", colour = "",
-       title = "Upper stratum mean prediction error by match period")
-
-frac_error_match_viz <- pop_error %>%
-  filter(poly_size == 60000 & sim == 1) %>%
-  pivot_longer(cols = ends_with("mae_frac")) %>%
-  ggplot(aes(x = match, y = value, colour = name)) +
-  geom_line() + 
-  scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
-  geom_hline(yintercept = 1, colour = "#F8766D") +
-  theme_few() +
-  facet_wrap(~country) +
-  # ylim(0, 1.5) +
-  scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean absolute prediction error\n(fraction of mean loss rate)", colour = "",
-       title = "Fractional prediction error by matching period")
-
-# Boxplot
-stratum_error_test <- sc_df %>%
-  filter(sim == 6 & poly_size == 60000 & year > START_YEAR) %>%
-  group_by(country, match, ID, stratum) %>%
-  summarise(mae = mean(abs(sc_loss - loss)),
-            bias = mean(sc_loss - loss),
-            mean_loss = mean(loss)) %>%
-  group_by(country, sim, stratum) %>%
-  mutate(mean_loss = mean(mean_loss))
-
-# Bias plots
-
-pop_bias_match_viz <- pop_error %>%
-  filter(poly_size == 60000 & sim == 1) %>%
-  ggplot(aes(x = match, y = pop_bias)) +
-  geom_line() +
-  geom_hline(yintercept = 0, colour = "#F8766D") +
-  theme_few() +
-  facet_wrap(~country) +
-  ylim(-0.2, 0.2) +
-  scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean prediction bias\n(% of polygon area)",
-       title = "Population-level mean prediction bias by matching period")
-
-stratum_4_bias_match_viz <- stratum_error %>%
-  filter(poly_size == 60000 & stratum == 4 & sim == 1) %>%
-  ggplot(aes(x = match, y = stratum_bias)) +
-  geom_line() +
-  geom_hline(yintercept = 0, colour = "#F8766D") +
-  theme_few() +
-  facet_wrap(~country) +
-  ylim(-6, 6) +
-  scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean prediction bias\n(% of polygon area)", colour = "",
-       title = "Upper stratum mean prediction bias by matching period")
-
-frac_bias_match_viz <- pop_error %>%
-  filter(poly_size == 60000 & sim == 5) %>%
-  pivot_longer(cols = ends_with("bias_frac")) %>%
-  ggplot(aes(x = match, y = value, colour = name)) +
-  geom_line() +
-  scale_colour_manual(labels = c("Population", "Highest loss bin"), values = c("blue", "red")) +
-  geom_hline(yintercept = 0, colour = "#F8766D") +
-  theme_few() +
-  facet_wrap(~country) +
-  # ylim(-1, 1) +
-  scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean prediction bias\n(fraction of mean loss rate)", colour = "",
-       title = "Fractional prediction bias by matching period")
-
-# Save to disk
-
-ggsave("results/figures/mae_by_country_population_match.png",
-       pop_error_match_viz,
-       width = 24, height = 16, units = "cm", dpi = 300)
-
-ggsave("results/figures/mae_by_country_s4_match.png",
-       stratum_4_error_match_viz,
-       width = 24, height = 16, units = "cm", dpi = 300)
-
-ggsave("results/figures/mae_by_country_frac_match.png",
-       frac_error_match_viz,
-       width = 24, height = 16, units = "cm", dpi = 300)
-
-ggsave("results/figures/bias_by_country_population_match.png",
-       pop_bias_match_viz,
-       width = 24, height = 16, units = "cm", dpi = 300)
-
-ggsave("results/figures/bias_by_country_s4_match.png",
-       stratum_4_bias_match_viz,
-       width = 24, height = 16, units = "cm", dpi = 300)
-
-ggsave("results/figures/bias_by_country_frac_match.png",
-       frac_bias_match_viz,
-       width = 24, height = 16, units = "cm", dpi = 300)
-
-# STILL TO DO
-# All the same results by polygon size
-# Do a different viz about error over the post-intervention period (RQ4)
-# Think about the forward problem - how does this inform us if we have a
-# project with a particular synthetic control-estimated baseline and we
-# want to know how accurate it might be?
-# There are two indicators - what is the estimated error and bias conditional on the
-# observed error in the matching period, and what is the estimated error and bias
-# conditional upon the estimated baseline?
-
-
-### 6. RQ2 - Mean absolute error and bias by polygon size ----
+## 7. RQ2 - Mean absolute error and bias by polygon size --------
 
 # pop_error_poly_viz <- pop_error %>%
 #   filter(match == 8 & sim == 5) %>%
@@ -791,8 +664,93 @@ ggsave("results/figures/bias_by_country_frac_poly.png",
        frac_bias_poly_viz,
        width = 24, height = 16, units = "cm", dpi = 300)
 
+## 8. RQ3 - Mean absolute error and bias by match period --------
 
-### 7. RQ4 - Performance of SC method over a long test period
+# For S5 (also need to do S1)
+
+pop_error_match_viz <- stratum_error %>%
+  filter(poly_size == 60000 & sim == 5) %>%
+  ggplot(aes(x = match, y = stratum_mae, colour = as.factor(stratum))) +
+  geom_point() +
+  geom_line(alpha = 0.5) +
+  # geom_hline(aes(yintercept = stratum_loss, colour = "Mean forest\nloss rate\n(% of project\narea)")) +
+  theme_bw() +
+  facet_wrap(~country) +
+  # ylim(0, 6) +
+  scale_x_continuous(breaks = seq(0, 24, 4)) +
+  labs(x = "Matching period", y = "Mean absolute prediction error\n(% of polygon area)", colour = "") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold"))
+
+pop_bias_match_viz <- stratum_error %>%
+  filter(poly_size == 60000 & sim == 5) %>%
+  ggplot(aes(x = match, y = stratum_bias, colour = as.factor(stratum))) +
+  geom_point() +
+  geom_line(alpha = 0.5) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  theme_bw() +
+  facet_wrap(~country, scales = "free") +
+  # ylim(-6, 6) +
+  scale_x_continuous(breaks = seq(0, 24, 4)) +
+  labs(x = "Matching period", y = "Mean bias\n(% of polygon area)", colour = "") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold"))
+
+# Boxplot
+stratum_error_test <- sc_df %>%
+  filter(poly_size == 60000 & year > START_YEAR) %>%
+  group_by(country, match, ID, sim, stratum) %>%
+  summarise(mae = mean(abs(sc_loss - loss)),
+            bias = mean(sc_loss - loss),
+            mean_loss = mean(loss)) %>%
+  group_by(country, sim, stratum) %>%
+  mutate(mean_loss = mean(mean_loss))
+
+strata_error_boxplot_match <- stratum_error_test %>%
+  filter(sim == 5) %>%
+  ggplot(aes(x = as.factor(stratum), y = mae, fill = as.factor(match))) +
+  geom_boxplot(coef = 1000, outliers = FALSE) +
+  geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
+  facet_wrap(~country, scales = "free") +
+  scale_fill_brewer(palette = "Blues") +
+  theme_bw() +
+  labs(x = "Forest loss bin", y = "Mean absolute prediction error\n(% of project area per year)",
+       fill = "Match period") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold"))
+
+strata_bias_boxplot_match <- stratum_error_test %>%
+  filter(sim == 5) %>%
+  ggplot(aes(x = as.factor(stratum), y = bias, fill = as.factor(match))) +
+  geom_boxplot(coef = 1000, outliers = FALSE) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  facet_wrap(~country, scales = "free") +
+  scale_fill_brewer(palette = "Blues") +
+  theme_bw() +
+  labs(x = "Forest loss bin", y = "Mean bias\n(% of project area per year)",
+       fill = "Match period") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold"))
+
+# Save to disk
+
+ggsave("results/figures/mae_by_country_bins_match.png",
+       pop_error_match_viz,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/bias_by_country_bins_match.png",
+       pop_bias_match_viz,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/boxplots/mae_boxplot_by_match.png",
+       strata_error_boxplot_match,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/bias_by_country_population_match.png",
+       pop_bias_match_viz,
+       width = 24, height = 16, units = "cm", dpi = 300)
+
+## 9. RQ4 - Performance of SC method over a long test period --------
 
 sc_df_rq4 <- map(COUNTRIES, function(country) {
   filepath <- paste0("results/sc_results/sc_results_", country, "_1998_60000.csv")
@@ -894,7 +852,7 @@ s4_error_rq4_viz <- pop_error_rq4 %>%
   geom_line(aes(colour = "Mean absolute\nprediction error")) +
   geom_line(aes(y = mean_loss_year, colour = "Mean forest\nloss rate")) +
   theme_few() +
-  facet_wrap(~country) +
+  facet_wrap(~country, scales = "free") +
   scale_colour_manual(values = c("black", "#F8766D")) +
   labs(x = "Year", y = "% of polygon area", colour = "",
        title = "Upper bin mean prediction error over test period")
@@ -907,7 +865,7 @@ annual_frac_error_rq4_viz <- pop_error_rq4 %>%
   geom_line(aes(y = s4_frac_mae, colour = "Upper bin")) +
   geom_hline(yintercept = 1, colour = "grey30") +
   theme_few() +
-  facet_wrap(~country) +
+  facet_wrap(~country, scales = "free") +
   labs(x = "Year",
        y = "Mean absolute prediction error\n(fraction of mean annual deforestation rate)",
        colour = "")
