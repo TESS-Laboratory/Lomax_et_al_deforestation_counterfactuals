@@ -678,9 +678,10 @@ pop_error_match_viz <- stratum_error %>%
   facet_wrap(~country) +
   # ylim(0, 6) +
   scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean absolute prediction error\n(% of polygon area)", colour = "") +
+  labs(x = "Match period (years)", y = "Mean absolute prediction error\n(% of polygon area)", colour = "Forest\nloss bin") +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"))
+        strip.text = element_text(face = "bold"),
+        legend.position = "right")
 
 pop_bias_match_viz <- stratum_error %>%
   filter(poly_size == 60000 & sim == 5) %>%
@@ -692,9 +693,10 @@ pop_bias_match_viz <- stratum_error %>%
   facet_wrap(~country, scales = "free") +
   # ylim(-6, 6) +
   scale_x_continuous(breaks = seq(0, 24, 4)) +
-  labs(x = "Matching period", y = "Mean bias\n(% of polygon area)", colour = "") +
+  labs(x = "Match period (years)", y = "Mean bias\n(% of polygon area)", colour = "Forest\nloss bin") +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"))
+        strip.text = element_text(face = "bold"),
+        legend.position = "right")
 
 # Boxplot
 stratum_error_test <- sc_df %>%
@@ -715,7 +717,7 @@ strata_error_boxplot_match <- stratum_error_test %>%
   scale_fill_brewer(palette = "Blues") +
   theme_bw() +
   labs(x = "Forest loss bin", y = "Mean absolute prediction error\n(% of project area per year)",
-       fill = "Match period") +
+       fill = "Match period (years)") +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
         strip.text = element_text(face = "bold"))
 
@@ -728,26 +730,26 @@ strata_bias_boxplot_match <- stratum_error_test %>%
   scale_fill_brewer(palette = "Blues") +
   theme_bw() +
   labs(x = "Forest loss bin", y = "Mean bias\n(% of project area per year)",
-       fill = "Match period") +
+       fill = "Match period (years)") +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
         strip.text = element_text(face = "bold"))
 
 # Save to disk
 
-ggsave("results/figures/mae_by_country_bins_match.png",
+ggsave("results/figures/mae_by_country_bins_match_s5.png",
        pop_error_match_viz,
        width = 24, height = 16, units = "cm", dpi = 300)
 
-ggsave("results/figures/bias_by_country_bins_match.png",
+ggsave("results/figures/bias_by_country_bins_match_s5.png",
        pop_bias_match_viz,
        width = 24, height = 16, units = "cm", dpi = 300)
 
-ggsave("results/figures/boxplots/mae_boxplot_by_match.png",
+ggsave("results/figures/boxplots/mae_boxplot_by_match_s5.png",
        strata_error_boxplot_match,
        width = 24, height = 16, units = "cm", dpi = 300)
 
-ggsave("results/figures/bias_by_country_population_match.png",
-       pop_bias_match_viz,
+ggsave("results/figures/boxplots/bias_boxplot_by_match_s5.png",
+       strata_bias_boxplot_match,
        width = 24, height = 16, units = "cm", dpi = 300)
 
 ## 9. RQ4 - Performance of SC method over a long test period --------
