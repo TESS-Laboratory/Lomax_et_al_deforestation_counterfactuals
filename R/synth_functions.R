@@ -143,18 +143,18 @@ add_biome_match <- function(df, treated_id, drop = FALSE) {
 get_formula <- function(sim, econ = TRUE) {
   if (sim == 1) {
     augsynth_formula <- "loss ~ treated"
-  } else if (sim %in% c(2, 3)) {
+  } else if (sim == 2) {
     augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
                             precipitation + temperature_2m + elevation + slope + ag_suitability +
                             dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
                             protected_frac + pop_density + dist_to_edge"
-  } else if (sim == 4) {
+  } else if (sim == 3) {
     augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
                             precipitation + temperature_2m + elevation + slope + ag_suitability +
                             dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
                             protected_frac + pop_density + dist_to_edge +
                             dist_to_treated"
-  } else if (sim %in% c(5, 6)) {
+  } else if (sim %in% c(4, 5)) {
     augsynth_formula <- "loss ~ treated | fc_start + buffer_loss + biomass + jurisdiction_loss +
                             precipitation + temperature_2m + elevation + slope + ag_suitability +
                             dist_to_road + dist_to_river + time_to_city + time_to_port + cropland +
@@ -189,9 +189,7 @@ prepare_outcomes <- function(sim, outcome_ts, pt, cumulative) {
     outcome_ts <- cumsum(outcome_ts)
   }
   
-  if (sim == 3) {
-    outcome_ts[1:pt] <- 0
-  } else if (sim %in% c(2, 4, 5)) {
+  if (sim %in% c(2, 3, 4)) {
     outcome_ts[pt] <- ifelse(cumulative == TRUE, last(outcome_ts[1:pt]), mean(outcome_ts[1:pt]))
     outcome_ts[1:(pt-1)] <- 0
   }
@@ -219,7 +217,7 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FA
   
   formula <- get_formula(sim, econ = econ)
   
-  if (sim %in% c(5,6)) {
+  if (sim %in% c(4, 5)) {
     data <- filter(data, shared_biome == 1)
     
     shared_eco_list <- filter(data, eco_frac_shared != 0)
