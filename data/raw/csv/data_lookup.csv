@@ -1,0 +1,10 @@
+country,continent,gee,dose,redd,rivers,grip,osm,worldpop
+Colombia,South America,Colombia,Colombia,Colombia,61|62|67,region2,colombia, NULL
+Brazil,South America,Brazil,Brazil,Brazil,62|63|64,region2,brazil, NULL
+Bolivia,South America,Bolivia,Bolivia,Bolivia,62|64|66,region2,bolivia, NULL
+Democratic Republic of the Congo,Africa,DRC,NULL,Democratic Republic of the Congo,13|16|17,region3,congo-democratic-republic, cod
+Madagascar,Africa,Madagascar,NULL,Madagascar,18,region3,madagascar, NULL
+Cote d'Ivoire,Africa,Cote_d_Ivoire,NULL,NULL,14,region3,ivory-coast, civ
+Indonesia,Asia,Indonesia,Indonesia,Indonesia,51|52|53,region6,indonesia, NULL
+Myanmar,Asia,Myanmar,NULL,Myanmar,44|45,region6,myanmar, NULL
+Malaysia,Asia,Malaysia,Malaysia,NULL,44|52,region6,malaysia, NULL
