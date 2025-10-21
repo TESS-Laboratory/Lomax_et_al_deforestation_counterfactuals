@@ -8,14 +8,14 @@ source("scripts/load.R")
 
 # Data selection
 COUNTRY <- "Malaysia"  # Target country
-START_YEAR <- 1998 # Simulated start year of protection project
+START_YEAR <- 2016 # Simulated start year of protection project
 MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-SIMULATIONS <- c(1, 5, 6)  # Simulations to run
-ECON <- TRUE  # Economic data present for country
+SIMULATIONS <- c(1,2,3,4,5)  # Simulations to run
+ECON <- FALSE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
-N_CORES <- 1
+N_CORES <- 16
 CUMULATIVE <- FALSE  # Use cumulative rather than annual deforestation to fit
 
 # Simulations to run for RQ1 and RQ3
@@ -47,10 +47,10 @@ if (length(cmd_args) == 6) {
 
 cat("Fitting synthetic controls for ", COUNTRY, "- Start Year: ", START_YEAR, ", Polygon Size: ", POLY_SIZE, " ha")
 
-# Parallelisation
-if (N_CORES > 1) {
-  plan(multicore, workers = N_CORES)
-}
+# # Parallelisation
+# if (N_CORES > 1) {
+#   plan(multicore, workers = N_CORES)
+# }
 
 ### 2. Load data
 grid_data <- read_rds(paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
@@ -69,7 +69,7 @@ if (nrow(grid_data) > MAX_POOL) {
   n_sample <- nrow(sample_ids)
   grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
   
-  set.seed <- SEED
+  set.seed(SEED)
   n_pool <- MAX_POOL - n_sample
   grid_data_pool <- grid_data %>%
     filter(!(ID %in% sample_ids$ID)) %>%
@@ -121,7 +121,7 @@ toc()
 sc_df <- sc_results %>%
   bind_rows() %>%
   filter(!is.na(synth)) %>%
-  mutate(sc_results = map2(synth, ID, extract_synth, cumulative = CUMULATIVE)) %>%
+  mutate(sc_results = map2(synth, ID, extract_synth, truth_data = grid_data, cumulative = CUMULATIVE)) %>%
   select(-synth) %>%
   unnest(sc_results)
 

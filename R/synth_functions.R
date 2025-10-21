@@ -175,7 +175,7 @@ get_formula <- function(sim, econ = TRUE) {
 #' @title Prepare outcome data
 #' @description Adjusts the pre-intervention outcome data according to the simulation
 #' selected. For simulations that do not use the full set of pre-intervention outcomes,
-#' these will be replaced by the mean value (for S2, S4 and S5) or by zeros (S3).
+#' these will be replaced by the mean value (for S2, S4 and S5).
 #' 
 #' @usage prepare_outcomes(sim, outcome_ts, pt)
 #' 
@@ -316,45 +316,38 @@ run_synthetic_control_mscmt <- function(id, match, data) {
   
 }
 
-#' @title Extract synth error
-#' @description Extracts a time series or average value of the absolute error
-#' (equivalent to the absolute average treatment effect on the treated) from
-#' an augsynth object.
+#' @title Extract synth weights
+#' @description Retrieves the donor weights from an augsynth object and returns
+#' them as a two-column data frame with columns "ID" and "weight".
 #' 
-#' @usage extract_synth_error(synth, ts = FALSE)
+#' @usage extract_synth_weights(synth)
 #' 
-#' @param synth an augsynth object
-#' @param ts logical. Should the function return a time series of annual error
-#' values rather than the default single mean absolute error in the
-#' post-intervention period?
+#' @param synth the augsynth object
 
-extract_synth_error <- function(synth, ts = FALSE) {
+extract_synth_weights <- function(synth) {
   
-  if (is.na(synth)) return(NA)
+  weights_df <- synth$weights %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column(var = "ID") %>%
+    rename(weight = V1) %>%
+    mutate(ID = as.numeric(ID))
   
-  att_df <- summary(synth)$att
-  
-  intervention_year <- synth$t_int
-  
-  att_post_intervention <- filter(att_df, Time >= intervention_year)
-  
-  att_abs <- abs(att_post_intervention$Estimate)
-  
-  if (ts == TRUE) {
-    att_abs
-  } else {
-    mean(att_abs)
-  }
+  weights_df
 }
 
+
 #' @title Extract synth
-#' @description Unpacks a synth object into a data frame of observed and predicted
-#' loss values
+#' @description Unpacks an augsynth object into a data frame of observed and predicted
+#' loss values. To allow reconstruction of equivalent pre-intervention time
+#' series for simulations 2-4, the pre-intervention predictions and loss are
+#' reconstructed from the original data and resulting donor weights.
 #' 
-#' @usage extract_synth(synth, id)
+#' @usage extract_synth(synth, id, truth_data, cumulative = FALSE)
 #' 
 #' @param synth an augsynth object
 #' @param id numeric. The polygon ID of the treated unit for a given synth
+#' @param truth_data a data.frame containing the original data
+#' @param cumulative logical. Should cumulative loss be used instead of annual?
 
 extract_synth <- function(synth, id, truth_data, cumulative = FALSE) {
   
@@ -362,16 +355,33 @@ extract_synth <- function(synth, id, truth_data, cumulative = FALSE) {
     as.numeric() %>%
     min()
   
-  results_df <- grid_data %>%
+  weights_df <- extract_synth_weights(synth)
+  
+  # Prepare original data for manual prediction
+  truth_data_long <- truth_data %>%
     st_drop_geometry() %>%
     wide_to_long() %>%
+    select(ID, year, loss)
+  
+  # Use weights and original to reconstruct fitted SC time series
+  # (data attached to synth object contains zero values to simulate
+  # not using pre-intervention lagged outcomes as covariates)
+  # na.rm = TRUE used as some donors were removed by filtering in S4
+  
+  synth_ts <- truth_data_long %>%
+    filter(ID != id & year >= start_year) %>%
+    left_join(weights_df, by = "ID") %>%
+    group_by(year) %>%
+    summarise(sc_loss = sum(weight * loss, na.rm = TRUE))
+  
+  # Merge with 
+  results_df <- truth_data_long %>%
     filter(ID == id & year >= start_year) %>%
     select(year, loss) %>%
-    mutate(sc_loss = predict(synth))
+    left_join(synth_ts, by = "year")
   
   if (cumulative == TRUE) {
-    results_df <- results_df %>%
-      group_by()
+    results_df <- results_df
       mutate(loss = cumsum(loss))
   }
   
