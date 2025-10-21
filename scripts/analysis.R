@@ -59,7 +59,7 @@ if (length(cmd_args) == 7) {
   POLY_SIZE <- as.numeric(cmd_args[2])
   START_YEAR <- as.numeric(cmd_args[3])
   MAX_POOL <- as.numeric(cmd_args[4])
-  N_CORES <- as.nhtopumeric(cmd_args[5])
+  N_CORES <- as.numeric(cmd_args[5])
   ECON <- as.logical(as.numeric(cmd_args[6]))
   CUMULATIVE <- as.logical(as.numeric(cmd_args[7]))
 } else {
