@@ -1,6 +1,5 @@
-#### Data analysis script
-#### Fits augmented synthetic controls for sample polygon data and writes the
-#### results to disk as a CSV.
+#### Results visualisation script
+#### Generates figures from results data and saves them to disk
 
 source("scripts/load.R")
 
@@ -15,6 +14,7 @@ COUNTRIES <- c(
   "Indonesia",
   "Malaysia", "Myanmar"
 )
+
 START_YEAR <- 2016  # Simulated start year of protection project
 RQ4_START_YEAR <- 1998  # Simulated start year for RQ4 simulations
 POLY_SIZE <- c(10000, 60000, 600000) # size of polygons in hectares
@@ -22,6 +22,13 @@ VIZ_SEED <- 111
 CUMULATIVE <- FALSE
 
 ## 2. Load data --------
+
+# Country polygons for maps
+country_polys <- map(COUNTRIES, gadm, level = 0, path = "data/raw/vector/gadm") %>%
+  map(st_as_sf) %>%
+  bind_rows()
+
+# Polygons by country
 
 # SC results by country
 cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
@@ -44,7 +51,8 @@ sc_df <- map(COUNTRIES, function(country) {
   country_df <- mutate(country_df, country = country)
   
   country_df
-}) %>% bind_rows()
+}) %>% bind_rows() %>%
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
 
 # Variable importance by country
 importance_df <- map(COUNTRIES, function(country) {
@@ -58,7 +66,8 @@ importance_df <- map(COUNTRIES, function(country) {
   }
 }) %>%
   purrr::discard(\(x) is.null(x)) %>%
-  bind_rows()
+  bind_rows() %>%
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
 
 # Deforestation rates by country (for population-level estimates)
 defor <- map(COUNTRIES, function(country) {
@@ -71,7 +80,8 @@ defor <- map(COUNTRIES, function(country) {
   
   country_defor
 }) %>% bind_rows() %>%
-  select(ID, country, poly_size, cum_loss, stratum, starts_with("loss"))
+  select(ID, country, poly_size, cum_loss, stratum, starts_with("loss")) %>%
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
 
 ## 3. Visualise SC trajectories --------
 
@@ -85,8 +95,7 @@ sc_sample <- sc_df %>%
   arrange(desc(mean_loss), .by_group = TRUE) %>%
   slice_sample(n = 6) %>%
   mutate(country_id = 1:n()) %>%
-  left_join(sc_df) %>%
-  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
+  left_join(sc_df)
 
 ts_plots <- sc_sample %>%
   group_by(country) %>%
@@ -103,30 +112,6 @@ ts_plots <- sc_sample %>%
     values = c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00', "black")) +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
         strip.text = element_text(face = "bold"))
-
-ts_plots
-
-# ts_plots_s5 <- sc_sample %>%
-#   group_by(country) %>%
-#   filter(match == 8 & poly_size == 60000 & year > (START_YEAR - match) & sim == 5) %>%
-#   ggplot(aes(x = as.numeric(year))) +
-#   geom_line(aes(y = loss, colour = "Observed"), lwd = 1.5) +
-#   geom_line(aes(y = sc_loss, colour = as.factor(sim)), lwd = 0.9) +
-#   geom_vline(xintercept = START_YEAR, colour = "steelblue") +
-#   facet_grid(cols = vars(country), rows = vars(country_id)) +
-#   theme_bw() +
-#   labs(x = "Year", y = "Annual forest loss\n(% of project area)", colour = "") +
-#   scale_colour_manual(
-#     labels = c("Synthetic control (S5)", "Observed"),
-#     values = c('#ff7f00', "black")) +
-#   scale_x_continuous(breaks = c(2012, 2020)) +
-#   theme(strip.background = element_rect(fill = "white", colour = "white"),
-#         strip.text = element_text(face = "bold", size = 12),
-#         axis.title = element_text(size = 16),
-#         axis.text = element_text(size = 12),
-#         legend.title = element_text(size = 16),
-#         legend.text = element_text(size = 12),
-#         legend.position = "bottom")
 
 ggsave(
   paste0("results/figures/sc_plots/", START_YEAR, "_60000_SIM_ts_plots.jpg"),
@@ -217,8 +202,11 @@ continuous_viz_bias_loss_country <- sc_df_summary %>%
   geom_point(size = 0.5, show.legend = FALSE, alpha = 0.5) +
   facet_wrap(~country, scales = "fixed") +
   theme_bw() +
-  labs(x = "Annual forest loss in test period\n(% of project area)",
-       y = "Bias in test period\n(% of project area)")
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "Bias in post-intervention period\n(% of project area)") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold"))
+
 
 continuous_viz_bias_loss_global <- sc_df_summary %>%
   filter(match == 8 & poly_size == 60000 & sim == 6) %>%
@@ -228,11 +216,11 @@ continuous_viz_bias_loss_global <- sc_df_summary %>%
   # geom_smooth(method = "loess", colour = "steelblue") +
   # coord_cartesian(ylim = c(-2, 2)) +
   theme_bw() +
-  labs(x = "Annual forest loss in test period\n(% of project area)",
-       y = "Bias in test period\n(% of project area)")
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "Bias in post-intervention period\n(% of project area)")
 
-continuous_viz_bias_loss_all <- continuous_viz_bias_loss_country +
-  continuous_viz_bias_loss_global +
+continuous_viz_bias_loss_all <- continuous_viz_bias_loss_global +
+  continuous_viz_bias_loss_country +
   plot_layout(axis_titles = "collect")
   
 continuous_viz_bias_loss_all
@@ -247,8 +235,10 @@ continuous_viz_mae_loss_country <- sc_df_summary %>%
   xlim(0, 7) + ylim(0, 7) +
   # scale_colour_viridis_c(option = "A") +
   theme_bw() +
-  labs(x = "Annual forest loss in test period\n(% of project area)",
-       y = "MAE in test period\n(% of project area)")
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "MAE in post-intervention period\n(% of project area)") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold"))
 
 continuous_viz_mae_loss_global <- sc_df_summary %>%
   filter(sim == 6 & match == 8 & poly_size == 60000) %>%
@@ -257,11 +247,11 @@ continuous_viz_mae_loss_global <- sc_df_summary %>%
   geom_point(size = 1.2, alpha = 0.5) +
   xlim(0, 7) + ylim(0, 7) +
   theme_bw() +
-  labs(x = "Annual forest loss in test period\n(% of project area)",
-       y = "MAE in test period\n(% of project area)")
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "MAE in post-intervention period\n(% of project area)")
 
-continuous_viz_mae_loss_all <- continuous_viz_mae_loss_country + 
-  continuous_viz_mae_loss_global +
+continuous_viz_mae_loss_all <- continuous_viz_mae_loss_global +
+  continuous_viz_mae_loss_country + 
   plot_layout(axis_titles = "collect")
 
 continuous_viz_mae_loss_all
@@ -291,8 +281,8 @@ continuous_viz_bias_matching_loss_country <- sc_df_summary %>%
   geom_point(size = 0.5, show.legend = FALSE) +
   facet_wrap(~country, scales = "free") +
   theme_bw() +
-  labs(x = "Annual forest loss in matching\nperiod (% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
+  labs(x = "Annual forest loss in pre-intervention\nperiod (% of polygon area)",
+       y = "Bias in post-intervention period\n(% of polygon area)")
 
 continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
@@ -300,8 +290,8 @@ continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 1.2, alpha = 0.5) +
   theme_bw() +
-  labs(x = "Annual forest loss in matching\nperiod (% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
+  labs(x = "Annual forest loss in pre-intervention\nperiod (% of polygon area)",
+       y = "Bias in post-intervention period\n(% of polygon area)")
 
 continuous_viz_bias_matching_loss_all <- continuous_viz_bias_matching_loss_country + 
   continuous_viz_bias_matching_loss_global +
@@ -310,7 +300,7 @@ continuous_viz_bias_matching_loss_all <- continuous_viz_bias_matching_loss_count
 continuous_viz_bias_matching_loss_all
 
 # continuous_viz_mae_matching_loss_global <- sc_df_summary %>%
-#   filter(sim == 6 & match == 8 & poly_size == 60000) %>%
+#   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
 #   ggplot(aes(x = mean_loss_matching, y = mae_test)) +
 #   geom_point(size = 0.5) +
 #   # geom_hline(yintercept = 0, colour = "#F8766D") +
@@ -321,14 +311,14 @@ continuous_viz_bias_matching_loss_all
 # Test period bias against matching period bias
 
 continuous_viz_bias_matching_bias_country <- sc_df_summary %>%
-  filter(sim == 6 & match == 8 & poly_size == 60000) %>%
+  filter(sim == 5 & match == 8 & poly_size == 60000) %>%
   ggplot(aes(x = bias_matching, y = bias_test)) +
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 0.5, show.legend = FALSE) +
   facet_wrap(~country, scales = "free") +
   theme_bw() +
-  labs(x = "Bias in matching period\n(% of polygon area)",
-       y = "Bias in test period\n(% of polygon area)")
+  labs(x = "Bias in pre-intervention period\n(% of polygon area)",
+       y = "Bias in post-intervention period\n(% of polygon area)")
 
 continuous_viz_bias_matching_bias_global <- sc_df_summary %>%
   filter(sim == 6 & match == 8 & poly_size == 60000) %>%
@@ -338,8 +328,8 @@ continuous_viz_bias_matching_bias_global <- sc_df_summary %>%
   geom_point(size = 1.2, alpha = 0.5) +
   scale_x_reverse() +
   theme_bw() +
-  labs(x = "Bias in matching period\n(% of project area)",
-       y = "Bias in test period\n(% of project area)")
+  labs(x = "Bias in pre-intervention period\n(% of project area)",
+       y = "Bias in post-intervention period\n(% of polygon area)")
 
 continuous_viz_bias_matching_bias_all <- continuous_viz_bias_matching_bias_country + 
   continuous_viz_bias_matching_bias_global +
