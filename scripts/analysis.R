@@ -18,14 +18,14 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Malaysia"       # Target country
+COUNTRY <- "Bolivia"        # Target country
 START_YEAR <- 2016          # Simulated start year of protection project
 POLY_SIZE <- 60000          # size of polygons in hectares
-SIMULATIONS <- c(1,2,3,4,5) # Simulations to run
-ECON <- FALSE               # Is economic data present for this country?
+SIMULATIONS <- 1:5          # Simulations to run
+ECON <- TRUE                # Is economic data present for this country?
 SEED <- 1471                # Random seed
 MAX_POOL <- 1000            # Max number of potential donor polygons to constrain 
-N_CORES <- 16               # Number of cores for parallelisation 
+N_CORES <- 1                # Number of cores for parallelisation 
 CUMULATIVE <- FALSE         # Fit to cumulative rather than annual loss?
 
 # Simulations to run for different RQs
@@ -39,13 +39,13 @@ if (START_YEAR == 2016) {
   } else {
     
     # RQ2
-    simulation_match_df <- tibble(sim = 5, match = 8)
+    simulation_match_df <- tibble(sim = 4, match = 8)
     
   }
 } else if (START_YEAR == 1998) {
   
   # RQ4
-  simulation_match_df <- tibble(sim = SIMULATIONS, match = 8)
+  simulation_match_df <- tibble(sim = 4, match = 8)
   
 }
 
@@ -138,6 +138,8 @@ toc()
 ### 4. Combine results and export data
 
 # Convert back to time series of observed and modeled forest loss for each unit
+
+write_rds(sc_results, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results.rds"))
 
 sc_df <- sc_results %>%
   bind_rows() %>%
