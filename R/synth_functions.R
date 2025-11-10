@@ -162,7 +162,7 @@ get_formula <- function(sim, econ = TRUE) {
                             dist_to_treated +
                             eco_frac_shared"
   } else {
-    stop("Not a valid simulation. Must be an integer between 1 and 6.")
+    stop("Not a valid simulation. Must be an integer between 1 and 5.")
   }
   
   if (econ == TRUE & (sim != 1)) {
