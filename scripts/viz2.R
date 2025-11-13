@@ -7,12 +7,15 @@ source("scripts/load.R")
 
 # Data selection
 COUNTRIES <- c(
-  "Bolivia", "Brazil",
+  "Bolivia",
+  "Brazil",
   "Colombia",
   "Cote d'Ivoire",
-  "Democratic Republic of the Congo", "Madagascar",
+  "Democratic Republic of the Congo",
+  "Madagascar",
   "Indonesia",
-  "Malaysia", "Myanmar"
+  "Malaysia",
+  "Myanmar"
 )
 
 START_YEAR <- 2016  # Simulated start year of protection project
