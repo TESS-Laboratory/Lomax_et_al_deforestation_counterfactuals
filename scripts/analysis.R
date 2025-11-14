@@ -8,9 +8,9 @@
 # Instructions
 ## To run from terminal go to project directory and use syntax:
 
-# "nohup Rscript scripts/analysis.R [COUNTRY] [POLY_SIZE] [START_YEAR] [MAX_POOL] [N_CORES] [ECON] [CUMULATIVE] &> [out_file] &"
+# "nohup Rscript scripts/analysis.R [COUNTRY] [POLY_SIZE] [START_YEAR] [MAX_POOL] [N_CORES] [ECON] &> [out_file] &"
 # e.g.,
-# "nohup Rscript scripts/analysis.R "Cote d'Ivoire" 60000 1000 2016 16 1 0 &> cotedivoire.out &"
+# "nohup Rscript scripts/analysis.R "Cote d'Ivoire" 60000 1000 2016 16 1 &> cotedivoire.out &"
 # logicals should be entered as 1/0, not TRUE/FALSE or T/F
 
 source("scripts/load.R")
@@ -22,7 +22,7 @@ COUNTRY <- "Malaysia"  # Target country
 START_YEAR <- 2016 # Simulated start year of protection project
 MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-SIMULATIONS <- c(1, 5, 6)  # Simulations to run
+SIMULATIONS <- 1:5  # Simulations to run
 ECON <- TRUE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
@@ -32,14 +32,13 @@ CUMULATIVE <- FALSE  # Use cumulative rather than annual deforestation to fit
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
-if (length(cmd_args) == 7) {
+if (length(cmd_args) == 6) {
   COUNTRY <- cmd_args[1]
   POLY_SIZE <- as.numeric(cmd_args[2])
   START_YEAR <- as.numeric(cmd_args[3])
   MAX_POOL <- as.numeric(cmd_args[4])
   N_CORES <- as.numeric(cmd_args[5])
   ECON <- as.logical(as.numeric(cmd_args[6]))
-  CUMULATIVE <- as.logical(as.numeric(cmd_args[7]))
 } else {
   print("Insufficient command line arguments given - using default values")
 }
