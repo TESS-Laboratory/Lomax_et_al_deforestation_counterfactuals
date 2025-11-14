@@ -2,6 +2,17 @@
 #### Fits augmented synthetic controls for sample polygon data and writes the
 #### results to disk as a CSV.
 
+#### Guy Lomax
+#### G.Lomax@exeter.ac.uk
+
+# Instructions
+## To run from terminal go to project directory and use syntax:
+
+# "nohup Rscript scripts/analysis.R [COUNTRY] [POLY_SIZE] [START_YEAR] [MAX_POOL] [N_CORES] [ECON] [CUMULATIVE] &> [out_file] &"
+# e.g.,
+# "nohup Rscript scripts/analysis.R "Cote d'Ivoire" 60000 1000 2016 16 1 0 &> cotedivoire.out &"
+# logicals should be entered as 1/0, not TRUE/FALSE or T/F
+
 source("scripts/load.R")
 
 ### 1. Set parameters --------
@@ -21,13 +32,14 @@ CUMULATIVE <- FALSE  # Use cumulative rather than annual deforestation to fit
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
-if (length(cmd_args) == 6) {
+if (length(cmd_args) == 7) {
   COUNTRY <- cmd_args[1]
   POLY_SIZE <- as.numeric(cmd_args[2])
   START_YEAR <- as.numeric(cmd_args[3])
   MAX_POOL <- as.numeric(cmd_args[4])
   N_CORES <- as.numeric(cmd_args[5])
   ECON <- as.logical(as.numeric(cmd_args[6]))
+  CUMULATIVE <- as.logical(as.numeric(cmd_args[7]))
 } else {
   print("Insufficient command line arguments given - using default values")
 }
@@ -76,7 +88,7 @@ if (nrow(grid_data) > MAX_POOL) {
   n_sample <- nrow(sample_ids)
   grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
   
-  set.seed <- SEED
+  set.seed(SEED)
   n_pool <- MAX_POOL - n_sample
   grid_data_pool <- grid_data %>%
     filter(!(ID %in% sample_ids$ID)) %>%
@@ -125,13 +137,16 @@ toc()
 
 # Convert back to time series of observed and modeled forest loss for each unit
 
+write_rds(sc_results, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results.rds"))
+
 sc_df <- sc_results %>%
   bind_rows() %>%
   filter(!is.na(synth)) %>%
-  mutate(sc_results = map2(synth, ID, extract_synth, cumulative = CUMULATIVE)) %>%
+  mutate(sc_results = map2(synth, ID, extract_synth, truth_data = grid_data, cumulative = CUMULATIVE)) %>%
   select(-synth) %>%
   unnest(sc_results)
 
+# Save output
 cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
 
 output_filename <- paste0("sc_results_", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, cumulative_flag, ".csv")
@@ -140,5 +155,6 @@ write_csv(sc_df, paste0("results/sc_results/", output_filename))
 
 cat("Results written to ", output_filename)
 
+# Send notification
 pushover(message = paste0("SC analysis complete: ", COUNTRY, ". Start year: ", START_YEAR))
 
