@@ -22,7 +22,7 @@ COUNTRY <- "Malaysia"  # Target country
 START_YEAR <- 2016 # Simulated start year of protection project
 MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
-SIMULATIONS <- 1:5  # Simulations to run
+# SIMULATIONS <- 1:5  # Simulations to run
 ECON <- TRUE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain 
@@ -63,7 +63,7 @@ if (START_YEAR == 2016) {
   
 }
 
-simulation_match_df <- filter(simulation_match_df, sim %in% SIMULATIONS)
+# simulation_match_df <- filter(simulation_match_df, sim %in% SIMULATIONS)
 
 # Parallelisation
 if (N_CORES > 1) {
