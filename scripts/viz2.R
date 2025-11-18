@@ -55,7 +55,8 @@ sc_df <- map(COUNTRIES, function(country) {
   
   country_df
 }) %>% bind_rows() %>%
-  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country)) %>%
+  mutate(sc_loss = 100 * sc_loss, loss = 100 * loss)
 
 # Variable importance by country
 importance_df <- map(COUNTRIES, function(country) {
@@ -97,9 +98,11 @@ sc_sample <- sc_df %>%
             stratum = first(stratum)) %>%
   group_by(country, stratum) %>%
   arrange(desc(mean_loss), .by_group = TRUE) %>%
-  slice_head(n = 2) %>%
-  mutate(country_id = LETTERS[1:n()]) %>%
+  slice_sample(n = 1) %>%
+  # mutate(country_id = LETTERS[1:n()]) %>%
   left_join(sc_df) %>%
+  group_by(country) %>%
+  mutate(max_loss = max(c(loss, sc_loss))) %>%
   ungroup()
 
 ts_plots <- sc_sample %>%
@@ -107,8 +110,8 @@ ts_plots <- sc_sample %>%
   ggplot(aes(x = as.numeric(year))) +
   geom_line(aes(y = loss, colour = "Observed"), lwd = 1.2) +
   geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
-  geom_vline(xintercept = START_YEAR, colour = "steelblue") +
-  facet_grid(cols = vars(stratum, country_id), rows = vars(country)) +
+  geom_vline(xintercept = START_YEAR, colour = "grey20") +
+  facet_grid(cols = vars(stratum), rows = vars(reorder(country, max_loss, decreasing = TRUE)), scales = "free_y") +
   theme_bw() +
   labs(x = "Year", y = "Annual forest loss\n(% of project area)", colour = "Simulation") +
   scale_colour_manual(
@@ -122,7 +125,7 @@ ts_plots
 ggsave(
   paste0("results/figures/sc_plots/", START_YEAR, "_60000_SIM_ts_plots.jpg"),
   ts_plots,
-  width = 34, height = 20, dpi = 300, units = "cm"
+  width = 24, height = 20, dpi = 300, units = "cm"
 )
 
 ## 4. RQ1 - Boxplots of stratum-level performance by simulation --------
@@ -179,10 +182,10 @@ strata_error_boxplot_sims <- stratum_error_test %>%
            fill = "Covariate\nsimulation") +
       boxplot_theme}
 
-strata_error_boxplot_legend <- ggpubr::get_legend(strata_error_boxplot_sims)
-
-strata_error_boxplot_main <- strata_error_boxplot_sims +
-  theme(legend.position = "none")
+# strata_error_boxplot_legend <- ggpubr::get_legend(strata_error_boxplot_sims)
+# 
+# strata_error_boxplot_main <- strata_error_boxplot_sims +
+#   theme(legend.position = "none")
 
 # Bias boxplot by simulation, bin and country 
 strata_bias_boxplot_sims <- stratum_error_test %>%
@@ -215,11 +218,12 @@ sc_df_summary <- sc_df %>%
   mutate(period = ifelse(year > START_YEAR, "test", "matching")) %>%
   group_by(country, sim, poly_size, match, period, ID) %>%
   summarise(
-    mean_loss = mean(loss) * 100,
-    mae = mean(abs(sc_loss - loss)) * 100,
-    bias = mean(sc_loss - loss) * 100
+    mean_loss = mean(loss),
+    mean_sc_loss = mean(sc_loss),
+    mae = mean(abs(sc_loss - loss)),
+    bias = mean(sc_loss - loss)
   ) %>%
-  pivot_wider(names_from = "period", values_from = c("mean_loss", "mae", "bias"))
+  pivot_wider(names_from = "period", values_from = c("mean_loss", "mean_sc_loss", "mae", "bias"))
 
 # Test period bias against test period observed forest loss
 continuous_viz_bias_loss_country <- sc_df_summary %>%
@@ -375,7 +379,7 @@ continuous_viz_bias_matching_bias_global <- sc_df_summary %>%
   geom_point(size = 1.2, alpha = 0.5) +
   scale_x_reverse() +
   theme_bw() +
-  labs(x = "Bias in pre-intervention period\n(% of project area)",
+  labs(x = "Bias in pre-intervention period\n(% of polygon area)",
        y = "Bias in post-intervention period\n(% of polygon area)")
 
 continuous_viz_bias_matching_bias_all <- continuous_viz_bias_matching_bias_country + 
@@ -402,6 +406,39 @@ continuous_viz_bias_global_predictors
 ggsave("results/figures/scatter_plots/continous_test_bias_vs_predictors.png",
        continuous_viz_bias_global_predictors,
        width = 30, height = 16, units = "cm", dpi = 300)
+
+## 5b. RQ1 - Continuous predicted vs. actual mean forest loss
+
+pred_vs_actual_country <- sc_df_summary %>%
+  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
+  ggplot(aes(x = mean_loss_test, y = mean_sc_loss_test)) +
+  geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.75, alpha = 0.5, show.legend = FALSE) +
+  facet_wrap(~country, scales = "fixed") +
+  xlim(0, 6) + ylim(0, 6) +
+  theme_bw() +
+  labs(x = "Observed mean loss in project period (% yr-1)",
+       y = "Predicted mean loss in project period (% yr-1)") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold", size = 14))
+
+pred_vs_actual_global <- sc_df_summary %>%
+  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
+  mutate(dummy = "All countries") %>%
+  ggplot(aes(x = mean_loss_test, y = mean_sc_loss_test)) +
+  geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
+  geom_point(size = 1.2, alpha = 0.5, show.legend = FALSE) +
+  facet_wrap(~dummy, scales = "fixed") +
+  xlim(0, 6) + ylim(0, 6) +
+  theme_bw() +
+  labs(x = "Observed mean loss in project period (% yr-1)",
+       y = "Predicted mean loss in project period (% yr-1)") +
+  theme(strip.background = element_rect(fill = "white", colour = "white"),
+        strip.text = element_text(face = "bold", size = 14))
+
+pred_vs_actual_country + pred_vs_actual_global +
+  plot_layout(ncol = 2, axes = "collect")
+  
 
 ## 6. RQ1 - Population and bin 4 mean bias and error by simulation --------
 
@@ -512,7 +549,7 @@ stratum_4_sim_bias_viz <- stratum_error %>%
   labs(x = "Simulation", y = "Mean bias\n(% of polygon area)", colour = "",
        title = "Upper stratum mean bias by simulation")
 
-## 7. RQ1 - Variable importance by country
+## 7. RQ1 - Variable importance by country ----
 
 importance_ordered <- importance_df %>%
   group_by(variable, country) %>%
@@ -521,52 +558,158 @@ importance_ordered <- importance_df %>%
   summarise(mean_country_weight = mean(mean_weight, na.rm = TRUE)) %>%
   arrange(mean_country_weight)
 
+variable_labels <- c(
+  cropland = "Cropland fraction",
+  protected_frac = "Protected fraction",
+  dist_to_edge = "Distance to edge",
+  ag_grp_frac = "Agriculture as % of GRP",
+  grp_pc_usd_2015 = "GRP per capita (2015 US$)",
+  biomass = "Forest biomass per hectare",
+  jurisdiction_loss = "Jurisdiction forest loss rate",
+  buffer_loss = "Buffer forest loss rate",
+  dist_to_road = "Distance to road",
+  pop_density = "Population density",
+  ag_suitability = "Agricultural suitability index",
+  fc_start = "Forest cover in start year",
+  temperature_2m = "Mean annual temperature",
+  time_to_port = "Travel time to nearest port",
+  precipitation = "Mean annual precipitation",
+  elevation = "Mean elevation",
+  time_to_city = "Travel time to nearest city",
+  slope = "Mean slope",
+  dist_to_river = "Distance to river",
+  eco_frac_shared = "Fraction of ecoregion shared",
+  dist_to_treated = "Distance to treated unit"
+)
+
+importance_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
+                          strip.text = element_text(face = "bold", size = 10),
+                          legend.text = element_text(size = 10),
+                          legend.title = element_text(size = 12),
+                          axis.title = element_text(size = 12),
+                          axis.text = element_text(size = 10)
+)
+
+# Importance - all strata
+
 importance_viz_country <- importance_df %>%
   mutate(variable = ordered(variable, levels = importance_ordered$variable)) %>%
   group_by(country, variable) %>%
-  mutate(
+  summarise(
     mean_weight = mean(min.loss.w),
     median_weight = median(min.loss.w),
     uq_weight = quantile(min.loss.w, 0.75),
     lq_weight = quantile(min.loss.w, 0.25)
   ) %>%
-  #           median_weight = median(min.loss.w),
-  #           min_weight = min(min.loss.w),
-  #           max_weight = max(min.loss.w)) %>%
   ggplot(aes(y = variable)) +
-  geom_point(aes(x = mean_weight), shape = 23, fill = "darkred") +
+  # geom_boxplot(aes(x = min.loss.w), coef = 10) +
+  # scale_x_log10() +
+  geom_point(aes(x = mean_weight), colour = "darkred") +
   # geom_errorbar(aes(xmin = lq_weight, xmax = uq_weight), alpha = 0.6) +
   facet_wrap(~country) +
-  theme_bw()
+  theme_bw() +
+  scale_y_discrete(labels = variable_labels) +
+  labs(x = "Mean weight", y = "Variable") +
+  importance_theme
 
 importance_viz_global <- importance_df %>%
+  mutate(variable = ordered(variable, levels = importance_ordered$variable)) %>%
   group_by(country, variable) %>%
   summarise(mean_weight = mean(min.loss.w)) %>%
   group_by(variable) %>%
   summarise(mean_weight_global = mean(mean_weight)) %>%
-  ggplot(aes(x = mean_weight_global, y = reorder(variable, mean_weight_global))) +
-  geom_col(position = "dodge") +
-  # facet_wrap(~country) +
-  theme_classic() +
-  labs(x = "Variable weight", y = "Variable", fill = "Forest loss\nstratum")
+  mutate(dummy_name = "All countries") %>%
+  ggplot(aes(x = mean_weight_global, y = variable)) +
+  geom_point(colour = "darkred") +
+  facet_wrap(~dummy_name) +
+  # geom_boxplot(coef = 10) +
+  # scale_x_log10() +
+  theme_bw() +
+  labs(x = "Mean weight", y = "Variable", fill = "Forest loss\nstratum") +
+  scale_y_discrete(labels = variable_labels) +
+  importance_theme
 
-importance_viz_global_s234 <- importance_df %>%
-  filter(stratum >= 2) %>%
-  group_by(country, variable) %>%
-  summarise(mean_weight = mean(min.loss.w)) %>%
+importance_viz_all <- importance_viz_country + importance_viz_global +
+  plot_layout(ncol = 2, axis_titles = "collect")
+
+ggsave(plot = importance_viz_all, filename = "results/figures/importance_plots/importance_all.png",
+       width = 30, height = 24, units = "cm", dpi = 300)
+
+# Importance - S3-4 only
+
+importance_ordered_s34 <- importance_df %>%
+  filter(stratum %in% c(3,4)) %>%
+  group_by(variable, country) %>%
+  summarise(mean_weight = mean(min.loss.w, na.rm = TRUE)) %>%
   group_by(variable) %>%
-  summarise(mean_weight_global = mean(mean_weight)) %>%
-  ggplot(aes(x = mean_weight_global, y = variable, fill = variable)) +
-  geom_col() +
-  # facet_wrap(~country) +
-  theme_classic()
+  summarise(mean_country_weight = mean(mean_weight, na.rm = TRUE)) %>%
+  arrange(mean_country_weight)
 
-importance_viz_country_boxplot_s34 <- importance_df %>%
-  filter(stratum %in% c(3, 4)) %>%
-  ggplot(aes(x = min.loss.w, y = variable, fill = variable)) +
-  geom_boxplot() +
+
+importance_viz_country_s34 <- importance_df %>%
+  filter(stratum %in% c(3,4)) %>%
+  mutate(variable = ordered(variable, levels = importance_ordered_s34$variable)) %>%
+  group_by(country, variable) %>%
+  summarise(
+    mean_weight = mean(min.loss.w),
+    median_weight = median(min.loss.w),
+    uq_weight = quantile(min.loss.w, 0.75),
+    lq_weight = quantile(min.loss.w, 0.25)
+  ) %>%
+  ggplot(aes(y = variable)) +
+  # geom_boxplot(aes(x = min.loss.w), coef = 10) +
+  # scale_x_log10() +
+  geom_point(aes(x = mean_weight), colour = "darkred") +
+  # geom_errorbar(aes(xmin = lq_weight, xmax = uq_weight), alpha = 0.6) +
   facet_wrap(~country) +
-  theme_classic()
+  theme_bw() +
+  scale_y_discrete(labels = variable_labels) +
+  labs(x = "Mean weight", y = "Variable") +
+  importance_theme
+
+importance_viz_global_s34 <- importance_df %>%
+  mutate(variable = ordered(variable, levels = importance_ordered_s34$variable)) %>%
+  filter(stratum %in% c(3,4)) %>%
+  group_by(country, variable) %>%
+  summarise(mean_weight = mean(min.loss.w)) %>%
+  group_by(variable) %>%
+  summarise(mean_weight_global = mean(mean_weight)) %>%
+  mutate(dummy_name = "All countries") %>%
+  ggplot(aes(x = mean_weight_global, y = variable)) +
+  geom_point(colour = "darkred") +
+  facet_wrap(~dummy_name) +
+  # geom_boxplot(coef = 10) +
+  # scale_x_log10() +
+  theme_bw() +
+  labs(x = "Mean weight", y = "Variable", fill = "Forest loss\nstratum") +
+  scale_y_discrete(labels = variable_labels) +
+  importance_theme
+
+importance_viz_all_s34 <- importance_viz_country_s34 + importance_viz_global_s34 +
+  plot_layout(ncol = 2, axis_titles = "collect")
+
+ggsave(plot = importance_viz_all_s34, filename = "results/figures/importance_plots/importance_all_s34.png",
+       width = 30, height = 24, units = "cm", dpi = 300)
+
+# importance_viz_global_s234 <- importance_df %>%
+#   filter(stratum >= 2) %>%
+#   group_by(country, variable) %>%
+#   summarise(mean_weight = mean(min.loss.w)) %>%
+#   group_by(variable) %>%
+#   summarise(mean_weight_global = mean(mean_weight)) %>%
+#   ggplot(aes(x = mean_weight_global, y = variable, fill = variable)) +
+#   geom_col() +
+#   # facet_wrap(~country) +
+#   theme_classic()
+# 
+# importance_viz_country_boxplot_s34 <- importance_df %>%
+#   filter(stratum %in% c(3, 4)) %>%
+#   ggplot(aes(x = min.loss.w, y = variable, fill = variable)) +
+#   geom_boxplot() +
+#   facet_wrap(~country) +
+#   theme_classic()
+
+
 
 ## 7. RQ2 - Mean absolute error and bias by polygon size --------
 
@@ -619,7 +762,7 @@ importance_viz_country_boxplot_s34 <- importance_df %>%
 # Boxplots of performance range by polygon size
 
 stratum_error_test_poly_size <- sc_df %>%
-  filter(match == 8 & sim == 5 & year > START_YEAR) %>%
+  filter(match == 8 & sim == 4 & year > START_YEAR) %>%
   group_by(country, poly_size, ID, stratum) %>%
   summarise(mae = mean(abs(sc_loss - loss)),
             bias = mean(sc_loss - loss),
@@ -648,7 +791,7 @@ strata_bias_boxplot_poly_size <- stratum_error_test_poly_size %>%
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_boxplot(outlier.size = 0.2, coef = 1000) +
   # geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
-  facet_wrap(~country, scales = "free") +
+  facet_wrap(~country, scales = "fixed") +
   scale_fill_brewer(palette = "Set2") +
   theme_bw() +
   labs(x = "Forest loss bin", y = "Mean bias\n(% of project area per year)",
@@ -732,7 +875,7 @@ ggsave("results/figures/bias_by_country_frac_poly.png",
 # For S5 (also need to do S1)
 
 pop_error_match_viz <- stratum_error %>%
-  filter(poly_size == 60000 & sim == 5) %>%
+  filter(poly_size == 60000 & sim == 4) %>%
   ggplot(aes(x = match, y = stratum_mae, colour = as.factor(stratum))) +
   geom_point() +
   geom_line(alpha = 0.5) +
@@ -747,7 +890,7 @@ pop_error_match_viz <- stratum_error %>%
         legend.position = "right")
 
 pop_bias_match_viz <- stratum_error %>%
-  filter(poly_size == 60000 & sim == 5) %>%
+  filter(poly_size == 60000 & sim == 4) %>%
   ggplot(aes(x = match, y = stratum_bias, colour = as.factor(stratum))) +
   geom_point() +
   geom_line(alpha = 0.5) +
