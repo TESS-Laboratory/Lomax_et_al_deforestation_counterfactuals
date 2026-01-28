@@ -976,13 +976,22 @@ annual_performance_rq4 <- sc_df_rq4 %>%
             mean_bias = mean(sc_loss - loss)) %>%
   ungroup()
 
+year_label_df <- data.frame(
+  country = factor("Bolivia", levels = unique(sc_df_rq4$country)),
+  x = 1998, y = -0.035,
+  label = "Project start"
+)
+
 annual_bias_rq4_viz <- ggplot(annual_performance_rq4, aes(x = year, y = mean_bias, colour = as.factor(stratum))) +
   geom_hline(yintercept = 0, colour = "grey20") +
-  geom_rect(xmin = 1991, ymin = -0.04, xmax = 1998, ymax = 0.01, fill = "grey90", colour = "grey90", alpha = 0.5) +
+  geom_vline(xintercept = 1998, colour = "grey20", lwd = 1) +
+  # geom_rect(xmin = 1991, ymin = -0.04, xmax = 1998, ymax = 0.01, fill = "grey90", colour = "grey90", alpha = 0.5) +
   geom_line() +
   # geom_point() +
+  geom_label(data = year_label_df, label = "Project start", aes(x = x, y = y), colour = "grey20", size = 3) +
   facet_wrap(~country) +
   theme_bw() +
+  scale_x_continuous(breaks = seq(1990, 2024, 8)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Year", y = "Mean bias\n(% of polygon area)", colour = "Forest loss bin") +
   theme(strip.background = element_rect(fill = "white", colour = "white"),
@@ -990,7 +999,7 @@ annual_bias_rq4_viz <- ggplot(annual_performance_rq4, aes(x = year, y = mean_bia
         legend.position = "right")
 
 
-ggsave("results/figures/bias_rq4.png",
+ggsave("results/figures/line_plots/bias_rq4.png",
        annual_bias_rq4_viz,
        width = 24, height = 16, units = "cm", dpi = 300)
 
