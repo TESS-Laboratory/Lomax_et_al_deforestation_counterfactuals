@@ -46,6 +46,9 @@ cat("Preparing data for ", COUNTRY, "- Start Year: ", START_YEAR, ", Polygon Siz
 
 print("Loading input data...")
 
+# Load data lookup table for efficient data I/O
+data_lookup <- read_csv("data/raw/csv/data_lookup.csv")
+
 # Country admin boundaries and jurisdictional data
 country <- gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>%
   st_as_sf() %>%

@@ -23,9 +23,7 @@ reload <- function() {
   )
   
   options(scipen = 999)
-  
-  # Load data lookup table for efficient data I/O
-  assign("data_lookup", read_csv("data/raw/csv/data_lookup.csv"), pos = ".GlobalEnv") 
+
 }
 
 reload()
