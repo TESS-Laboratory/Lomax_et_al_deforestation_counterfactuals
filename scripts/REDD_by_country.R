@@ -2,7 +2,8 @@
 #### set up environment ####
 # install.packages("tidyverse")
 # install.packages("countrycode")
-library(tidyverse)
+library(readr)
+library(dplyr)
 library(countrycode)
 
 ####load data ####
