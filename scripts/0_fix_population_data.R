@@ -1,4 +1,5 @@
 # Script to impute missing population data in GlobPop raster using WorldPop
+# Guy Lomax
 
 source("scripts/load.R")
 
