@@ -153,7 +153,7 @@ strata_n_lookup <- stratum_error_test %>%
   mutate(max_bias_label_y = max(bias_label_y),
          max_error_label_y = max(error_label_y))
 
-boxplot_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
+panel_plot_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
                        strip.text = element_text(face = "bold", size = 10),
                        legend.position = "inside",
                        legend.position.inside = c(0.9, 0.25),
@@ -180,7 +180,7 @@ strata_error_boxplot_sims <- stratum_error_test %>%
       theme_bw() +
       labs(x = "Forest loss bin", y = "Mean absolute error\n(% of project area per year)",
            fill = "Covariate\nsimulation") +
-      boxplot_theme}
+      panel_plot_theme}
 
 # strata_error_boxplot_legend <- ggpubr::get_legend(strata_error_boxplot_sims)
 # 
@@ -201,7 +201,7 @@ strata_bias_boxplot_sims <- stratum_error_test %>%
       theme_bw() +
       labs(x = "Forest loss bin", y = "Mean bias\n(% of project area per year)",
            fill = "Matching\ncovariates") +
-      boxplot_theme}
+      panel_plot_theme}
 
 ggsave("results/figures/boxplots/strata_error_boxplots_by_sim.png",
        strata_error_boxplot_sims,
@@ -223,7 +223,10 @@ sc_df_summary <- sc_df %>%
     mae = mean(abs(sc_loss - loss)),
     bias = mean(sc_loss - loss)
   ) %>%
-  pivot_wider(names_from = "period", values_from = c("mean_loss", "mean_sc_loss", "mae", "bias"))
+  pivot_wider(names_from = "period", values_from = c("mean_loss", "mean_sc_loss", "mae", "bias")) %>%
+  ungroup()
+
+sc_df_central <- filter(sc_df_summary, sim == 4 & match == 8 & poly_size == 60000)
 
 theme_scatter <- theme(
   strip.background = element_rect(fill = "white", colour = "white"),
@@ -233,9 +236,7 @@ theme_scatter <- theme(
 )
 
 # Test period bias against test period observed forest loss
-continuous_viz_bias_loss_country <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = mean_loss_test, y = bias_test)) +
+continuous_viz_bias_loss_country <- ggplot(sc_df_central, aes(x = mean_loss_test, y = bias_test)) +
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 0.5, show.legend = FALSE, alpha = 0.5) +
   facet_wrap(~country, scales = "fixed") +
@@ -243,8 +244,7 @@ continuous_viz_bias_loss_country <- sc_df_summary %>%
   labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
        y = "Bias in post-intervention period\n(% of project area)")
 
-continuous_viz_bias_loss_global <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
+continuous_viz_bias_loss_global <- sc_df_central %>%
   mutate(panel_label = "All countries") %>%
   ggplot(aes(x = mean_loss_test, y = bias_test)) +
   geom_hline(yintercept = 0, colour = "#F8766D") +
@@ -264,9 +264,7 @@ continuous_viz_bias_loss_all <- continuous_viz_bias_loss_country +
 continuous_viz_bias_loss_all
 
 # MAE vs. test period forest loss
-continuous_viz_mae_loss_country <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = mean_loss_test, y = mae_test)) +
+continuous_viz_mae_loss_country <- ggplot(sc_df_central, aes(x = mean_loss_test, y = mae_test)) +
   # geom_abline(intercept = 0, slope = 1, colour = "#F8766D") +
   geom_point(size = 0.5, alpha = 0.5, show.legend = FALSE) +
   facet_wrap(~country, scales = "fixed") +
@@ -276,8 +274,7 @@ continuous_viz_mae_loss_country <- sc_df_summary %>%
   labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
        y = "MAE in post-intervention period\n(% of project area)")
 
-continuous_viz_mae_loss_global <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
+continuous_viz_mae_loss_global <- sc_df_central %>%
   mutate(panel_label = "All countries") %>%
   ggplot(aes(x = mean_loss_test, y = mae_test)) +
   # geom_abline(intercept = 0, slope = 1, colour = "#F8766D") +
@@ -311,11 +308,11 @@ ggsave("results/figures/scatter_plots/continuous_viz_mae_loss_all.png",
 #        continuous_viz_global_mae_bias,
 #        width = 30, height = 16, units = "cm", dpi = 300)
 
+## 6. RQ1 - Continuous plots of test bias against matching period loss and bias ----
+
 # Test period bias against matching period forest loss
 
-# continuous_viz_bias_matching_loss_country <- sc_df_summary %>%
-#   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
-#   ggplot(aes(x = mean_loss_matching, y = bias_test)) +
+# continuous_viz_bias_matching_loss_country <- ggplot(sc_df_central, aes(x = mean_loss_matching, y = bias_test)) +
 #   geom_hline(yintercept = 0, colour = "#F8766D") +
 #   geom_point(size = 0.5, show.legend = FALSE) +
 #   facet_wrap(~country, scales = "free") +
@@ -325,11 +322,18 @@ ggsave("results/figures/scatter_plots/continuous_viz_mae_loss_all.png",
 #   theme(strip.background = element_rect(fill = "white", colour = "white"),
 #         strip.text = element_text(face = "bold", size = 14))
 
-continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = mean_loss_matching, y = bias_test)) +
+sc_df_central_cor <- sc_df_central %>%
+  summarise(match_loss_mae_cor = cor(mean_loss_matching, mae_test),
+            match_mae_mae_cor = cor(mae_matching, mae_test),
+            match_loss_bias_cor = cor(mean_loss_matching, bias_test),
+            match_bias_bias_cor = cor(bias_matching, bias_test)) %>%
+  mutate(across(everything(), ~ paste0("r = ", round(.x, 2))))
+
+continuous_viz_bias_matching_loss_global <- ggplot(sc_df_central, aes(x = mean_loss_matching, y = bias_test)) +
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 1.2, alpha = 0.5) +
+  geom_text(data = sc_df_central_cor, aes(label = match_loss_bias_cor),
+            x = 5, y = 2, size = 8) +
   theme_bw() +
   labs(x = "Annual forest loss in pre-intervention\nperiod (% of polygon area)",
        y = "Bias in post-intervention period\n(% of polygon area)")
@@ -344,9 +348,7 @@ continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
 # 
 # continuous_viz_bias_matching_loss_all
 
-# continuous_viz_mae_matching_loss_global <- sc_df_summary %>%
-#   filter(sim == 5 & match == 8 & poly_size == 60000) %>%
-#   ggplot(aes(x = mean_loss_matching, y = mae_test)) +
+# continuous_viz_mae_matching_loss_global <- ggplot(sc_df_central, aes(x = mean_loss_matching, y = mae_test)) +
 #   geom_point(size = 0.5) +
 #   # geom_hline(yintercept = 0, colour = "#F8766D") +
 #   theme_bw() +
@@ -355,9 +357,7 @@ continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
 
 # Test period bias against matching period bias
 
-# continuous_viz_bias_matching_bias_country <- sc_df_summary %>%
-#   filter(sim == 4 & match == 8 & poly_size == 60000) %>%
-#   ggplot(aes(x = bias_matching, y = bias_test)) +
+# continuous_viz_bias_matching_bias_country <- ggplot(sc_df_central, aes(x = bias_matching, y = bias_test)) +
 #   geom_hline(yintercept = 0, colour = "#F8766D") +
 #   geom_vline(xintercept = 0, colour = "#F8766D") +
 #   geom_point(size = 0.5, show.legend = FALSE) +
@@ -366,13 +366,13 @@ continuous_viz_bias_matching_loss_global <- sc_df_summary %>%
 #   labs(x = "Bias in pre-intervention period\n(% of polygon area)",
 #        y = "Bias in post-intervention period\n(% of polygon area)")
 
-continuous_viz_bias_matching_bias_global <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = bias_matching, y = bias_test)) +
+continuous_viz_bias_matching_bias_global <- ggplot(sc_df_central, aes(x = bias_matching, y = bias_test)) +
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_vline(xintercept = 0, colour = "#F8766D") +
   geom_point(size = 1.2, alpha = 0.5) +
-  scale_x_reverse() +
+  geom_text(data = sc_df_central_cor, aes(label = match_bias_bias_cor),
+            x = 0.4, y = 2, size = 8) +
+  # scale_x_reverse() +
   theme_bw() +
   labs(x = "Bias in pre-intervention period\n(% of polygon area)",
        y = "Bias in post-intervention period\n(% of polygon area)")
@@ -398,9 +398,7 @@ ggsave("results/figures/scatter_plots/continous_test_bias_vs_predictors.png",
 ## 5b. RQ1 - Continuous predicted vs. actual mean forest loss
 ## (alternative visualisation based on Rau et al. (2025))
 
-pred_vs_actual_country <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
-  ggplot(aes(x = mean_loss_test, y = mean_sc_loss_test)) +
+pred_vs_actual_country <- ggplot(sc_df_central, aes(x = mean_loss_test, y = mean_sc_loss_test)) +
   geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
   geom_point(size = 0.75, alpha = 0.5, show.legend = FALSE) +
   facet_wrap(~country, scales = "fixed") +
@@ -409,8 +407,7 @@ pred_vs_actual_country <- sc_df_summary %>%
   labs(x = "Observed mean loss in project period (% yr-1)",
        y = "Predicted mean loss in project period (% yr-1)")
 
-pred_vs_actual_global <- sc_df_summary %>%
-  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
+pred_vs_actual_global <- sc_df_central %>%
   mutate(dummy = "All countries") %>%
   ggplot(aes(x = mean_loss_test, y = mean_sc_loss_test)) +
   geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
@@ -429,7 +426,7 @@ ggsave("results/figures/scatter_plots/continuous_pred_vs_observed_loss.png",
        pred_vs_actual_combined,
        width = 30, height = 16, units = "cm", dpi = 300)
 
-## 6. RQ1 - Population and bin 4 mean bias and error by simulation --------
+## 7. RQ1 - Population and bin 4 mean bias and error by simulation --------
 
 # Create population-level and stratum-level results
 
@@ -492,7 +489,7 @@ pop_error <- stratum_error %>%
             s4_mae_frac = s4_mae / s4_loss,
             s4_bias_frac = s4_bias / s4_loss)
 
-## 7. RQ1 - Variable importance by country ----
+## 8. RQ1 - Variable importance by country ----
 
 importance_ordered <- importance_df %>%
   group_by(variable, country) %>%
@@ -572,7 +569,7 @@ importance_viz_global <- importance_df %>%
   scale_y_discrete(labels = variable_labels) +
   importance_theme
 
-importance_viz_all <- importance_viz_country + importance_viz_global +
+importance_viz_all <- importance_viz_global + importance_viz_country +
   plot_layout(ncol = 2, axis_titles = "collect")
 
 ggsave(plot = importance_viz_all, filename = "results/figures/importance_plots/importance_all.png",
@@ -654,7 +651,7 @@ ggsave(plot = importance_viz_all_s34, filename = "results/figures/importance_plo
 
 
 
-## 7. RQ2 - Mean absolute error and bias by polygon size --------
+## 9. RQ2 - Boxplots of mean absolute error and bias by polygon size --------
 
 # pop_error_poly_viz <- pop_error %>%
 #   filter(match == 8 & sim == 5) %>%
@@ -719,13 +716,12 @@ strata_error_boxplot_poly_size <- stratum_error_test_poly_size %>%
   ggplot(aes(x = as.factor(stratum), y = mae, fill = as.factor(poly_size))) +
   geom_boxplot(outlier.size = 0.2) +
   # geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
-  facet_wrap(~country) +
+  facet_wrap(~country, ncol = 5, nrow = 2) +
   scale_fill_brewer(palette = "Set2") +
   theme_bw() +
   labs(x = "Forest loss bin", y = "Mean absolute prediction error\n(% of project area per year)",
        fill = "Project size (ha)") +
-  theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"))
+  panel_plot_theme
 
 strata_bias_boxplot_poly_size <- stratum_error_test_poly_size %>%
   mutate(poly_size = ordered(paste0(poly_size / 1000, "k"),
@@ -734,13 +730,12 @@ strata_bias_boxplot_poly_size <- stratum_error_test_poly_size %>%
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_boxplot(outlier.size = 0.2, coef = 1000) +
   # geom_point(aes(y = mean_loss), colour = "red", size = 3, shape = 18, show.legend = FALSE) +
-  facet_wrap(~country, scales = "fixed") +
+  facet_wrap(~country, scales = "fixed", ncol = 5, nrow = 2) +
   scale_fill_brewer(palette = "Set2") +
   theme_bw() +
   labs(x = "Forest loss bin", y = "Mean bias\n(% of project area per year)",
        fill = "Project size (ha)") +
-  theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"))
+  panel_plot_theme
 
 ggsave("results/figures/boxplots/mae_boxplot_by_poly_size.png",
        strata_error_boxplot_poly_size,
@@ -750,7 +745,7 @@ ggsave("results/figures/boxplots/bias_boxplot_by_poly_size.png",
        strata_bias_boxplot_poly_size,
        width = 32, height = 16, units = "cm", dpi = 300)
 
-## 8. RQ3 - Mean absolute error and bias by match period --------
+## 10. RQ3 - Mean absolute error and bias by match period --------
 
 # For S4
 
@@ -847,7 +842,7 @@ ggsave("results/figures/line_plots/bias_by_country_bins_match_s4.png",
 #   theme_bw() +
 #   labs(x = "Forest loss bin", y = "Mean bias\n(% of project area per year)",
 #        fill = "Match period (years)") +
-#   boxplot_theme
+#   panel_plot_theme
 # 
 # # Save to disk
 # 
@@ -859,7 +854,7 @@ ggsave("results/figures/line_plots/bias_by_country_bins_match_s4.png",
 #        strata_bias_boxplot_match,
 #        width = 24, height = 16, units = "cm", dpi = 300)
 
-## 9. RQ4 - Performance of SC method over a long test period --------
+## 11. RQ4 - Performance of SC method over a long test period --------
 
 sc_df_rq4 <- map(COUNTRIES, function(country) {
   filepath <- paste0("results/sc_results/sc_results_", country, "_1998_60000.csv")
@@ -869,7 +864,8 @@ sc_df_rq4 <- map(COUNTRIES, function(country) {
     mutate(country = country)
   
   country_df
-}) %>% bind_rows()
+}) %>% bind_rows() %>%
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
 
 annual_performance_rq4 <- sc_df_rq4 %>%
   mutate(loss = 100 * loss,
@@ -905,16 +901,13 @@ annual_bias_rq4_viz <- ggplot(annual_performance_rq4, aes(x = year, y = mean_bia
   # coord_cartesian(ylim = c(-10, 10)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Year", y = "Mean bias\n(% of polygon area)", colour = "Forest loss bin") +
-  theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"),
-        legend.position = "inside",
-        legend.position.inside = c(0.9, 0.25))
+  panel_plot_theme
 
 ggsave("results/figures/line_plots/bias_rq4.png",
        annual_bias_rq4_viz,
        width = 32, height = 16, units = "cm", dpi = 300)
 
-## 10. Sampling scheme map figures ----
+## 12. Sampling scheme map figures ----
 
 # Load country boundary, protected areas and FC raster
 EXAMPLE_COUNTRY <- "Bolivia"
