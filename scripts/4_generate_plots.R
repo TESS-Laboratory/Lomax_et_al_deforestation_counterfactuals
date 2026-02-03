@@ -216,14 +216,14 @@ ggsave("results/figures/boxplots/strata_bias_boxplots_by_sim.png",
 # Create summary df for easier plotting
 sc_df_summary <- sc_df %>%
   mutate(period = ifelse(year > START_YEAR, "test", "matching")) %>%
-  group_by(country, sim, poly_size, match, period, ID) %>%
+  group_by(country, sim, poly_size, match, period, ID, stratum) %>%
   summarise(
     mean_loss = mean(loss),
     mean_sc_loss = mean(sc_loss),
     mae = mean(abs(sc_loss - loss)),
     bias = mean(sc_loss - loss)
   ) %>%
-  pivot_wider(names_from = "period", values_from = c("mean_loss", "mean_sc_loss", "mae", "bias")) %>%
+  pivot_wider(names_from = "period", values_from = sc("mean_loss", "mean_sc_loss", "mae", "bias")) %>%
   ungroup()
 
 sc_df_central <- filter(sc_df_summary, sim == 4 & match == 8 & poly_size == 60000)
@@ -256,8 +256,8 @@ continuous_viz_bias_loss_global <- sc_df_central %>%
   labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
        y = "Bias in post-intervention period\n(% of project area)")
 
-continuous_viz_bias_loss_all <- continuous_viz_bias_loss_country +
-  continuous_viz_bias_loss_global +
+continuous_viz_bias_loss_all <- continuous_viz_bias_loss_global +
+  continuous_viz_bias_loss_country +
   plot_layout(axis_titles = "collect") &
   theme_scatter
 
@@ -285,8 +285,8 @@ continuous_viz_mae_loss_global <- sc_df_central %>%
   labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
        y = "MAE in post-intervention period\n(% of project area)")
 
-continuous_viz_mae_loss_all <- continuous_viz_mae_loss_country + 
-  continuous_viz_mae_loss_global +
+continuous_viz_mae_loss_all <- continuous_viz_mae_loss_global + 
+  continuous_viz_mae_loss_country +
   plot_layout(axis_titles = "collect") &
   theme_scatter
 
@@ -427,6 +427,25 @@ ggsave("results/figures/scatter_plots/continuous_pred_vs_observed_loss.png",
        width = 30, height = 16, units = "cm", dpi = 300)
 
 ## 7. RQ1 - Population and bin 4 mean bias and error by simulation --------
+
+# Tables of overall MAE and bias by simulation and forest loss stratum
+
+overall_error_bias_sim <- sc_df_summary %>%
+  filter(poly_size == 60000 & match == 8) %>%
+  group_by(sim,) %>%
+  summarise(mean_mae = mean(mae_test),
+            mean_bias = mean(bias_test)) %>%
+  mutate(stratum = "All", sim = paste0("S", sim))
+
+stratum_error_bias_sim <- sc_df_summary %>%
+  filter(poly_size == 60000 & match == 8) %>%
+  group_by(sim, stratum, country) %>%
+  summarise(mean_mae = mean(mae_test),
+            mean_bias = mean(bias_test)) %>%
+  mutate(stratum = as.character(stratum), sim = paste0("S", sim))
+
+error_bias_sim <- bind_rows(overall_error_bias_sim, stratum_error_bias_sim) %>%
+  pivot_wider(names_from = "sim", values_from = c(mean_mae, mean_bias))
 
 # Create population-level and stratum-level results
 
@@ -625,7 +644,7 @@ importance_viz_global_s34 <- importance_df %>%
   scale_y_discrete(labels = variable_labels) +
   importance_theme
 
-importance_viz_all_s34 <- importance_viz_country_s34 + importance_viz_global_s34 +
+importance_viz_all_s34 <- importance_viz_global_s34 + importance_viz_country_s34 +
   plot_layout(ncol = 2, axis_titles = "collect")
 
 ggsave(plot = importance_viz_all_s34, filename = "results/figures/importance_plots/importance_all_s34.png",
@@ -747,7 +766,7 @@ ggsave("results/figures/boxplots/bias_boxplot_by_poly_size.png",
 
 ## 10. RQ3 - Mean absolute error and bias by match period --------
 
-# For S4
+MATCH_SIM <- 5
 
 ## WRAP INTO FUNCTION FOR REPRODUCIBILITY (with arguments for simulation, poly_size etc.)
 
@@ -759,7 +778,7 @@ stratum_error_by_match <- sc_df %>%
             bias = mean(sc_loss - loss))
 
 stratum_error_bias_summary <- stratum_error_by_match %>%
-  filter(sim == 4) %>%
+  filter(sim == MATCH_SIM) %>%
   group_by(country, stratum, match, sim) %>%
   summarise(stratum_mae = mean(mae),
             stratum_mae_upper = max(mae),
@@ -783,10 +802,7 @@ stratum_error_match_viz <- ggplot(
   scale_x_continuous(breaks = seq(0, 24, 4)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Match period (years)", y = "Mean absolute prediction error\n(% of polygon area)", colour = "Forest\nloss bin") +
-  theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"),
-        legend.position = "inside",
-        legend.position.inside = c(0.9, 0.25))
+  panel_plot_theme
 
 stratum_bias_match_viz <- ggplot(
   stratum_error_bias_summary,
@@ -797,21 +813,18 @@ stratum_bias_match_viz <- ggplot(
   geom_ribbon(alpha = 0.1, colour = NA) +
   geom_line(alpha = 0.5) +
   theme_bw() +
-  facet_wrap(~country, scales = "fixed", ncol = 5, nrow = 2) +
+  facet_wrap(~country, scales = "free", ncol = 5, nrow = 2) +
   # ylim(-6, 6) +
   scale_x_continuous(breaks = seq(0, 24, 4)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Match period (years)", y = "Mean bias\n(% of polygon area)", colour = "Forest\nloss bin", fill = "Forest\nloss bin") +
-  theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"),
-        legend.position = "inside",
-        legend.position.inside = c(0.9, 0.25))
+  panel_plot_theme
 
-ggsave("results/figures/line_plots/mae_by_country_bins_match_s4.png",
+ggsave(paste0("results/figures/line_plots/mae_by_country_bins_match_s", MATCH_SIM, ".png"),
        stratum_error_match_viz,
        width = 32, height = 16, units = "cm", dpi = 300)
 
-ggsave("results/figures/line_plots/bias_by_country_bins_match_s4.png",
+ggsave(paste0("results/figures/line_plots/bias_by_country_bins_match_s", MATCH_SIM, ".png"),
        stratum_bias_match_viz,
        width = 32, height = 16, units = "cm", dpi = 300)
 
@@ -909,6 +922,10 @@ ggsave("results/figures/line_plots/bias_rq4.png",
 
 ## 12. Sampling scheme map figures ----
 
+# Load data lookup table (needed for data loading functions)
+
+data_lookup <- read_csv("data/raw/csv/data_lookup.csv")
+
 # Load country boundary, protected areas and FC raster
 EXAMPLE_COUNTRY <- "Bolivia"
 CRS <- "ESRI:54034"
@@ -928,7 +945,7 @@ country_fc_masked <- mask(country_fc_start, country_fc_start, maskvalues = c(0, 
 
 protected_areas <- get_vector("data/raw/vector/protected_areas", match = EXAMPLE_COUNTRY, ext = ".geojson") %>%
   st_transform(CRS) %>%
-  mutate(type = "New Protected Area") %>%
+  mutate(type = "PA designated post-1991") %>%
   filter(STATUS_YR >= 1991 & MARINE == 0) %>%
   st_intersection(country_poly)
 redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
@@ -951,12 +968,13 @@ country_donors <- paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_da
 country_data <- read_rds(paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_data.rds"))
 
 country_results <- sc_df %>%
-  filter(country == EXAMPLE_COUNTRY & sim == 5 & match == 8 & poly_size == 60000)
+  filter(country == EXAMPLE_COUNTRY & sim == 4 & match == 8 & poly_size == 60000)
 
 country_synth <- paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_sc_results.rds") %>%
   read_rds() %>%
   bind_rows() %>%
-  filter(match == 8 & sim == 5)
+  filter(match == 8 & sim == 4) %>%
+  distinct(sim, match, ID, stratum, .keep_all = TRUE)  # Remove duplicate synths (issue with previous lookup table)
 
 country_synth_weights <- country_synth %>%
   rename(treated_id = ID) %>%
@@ -976,8 +994,6 @@ country_synth_weights <- country_synth %>%
 #   geom_col(aes(x = weight, y = as.factor(donor_id))) +
 #   facet_wrap(~treated_id) +
 #   theme_classic()
-
-# Choosing ID 778
 
 fig_id <- 961 #904
 
@@ -1013,6 +1029,8 @@ panel_a <- tm_shape(country_fc_start, bbox = st_bbox(country_poly)) +
 
 # Panel B: Donor weights
 
+WEIGHT_THRESHOLD <- 0.01
+
 poly_weights <- country_donors %>%
   select(ID, x) %>%
   inner_join(
@@ -1022,7 +1040,7 @@ poly_weights <- country_donors %>%
   rename(donor_id = ID) %>%
   select(treated_id, donor_id, weight, x)
 
-poly_weights_gte_0.01 <- filter(poly_weights, weight >= 0.01)
+poly_weights_threshold <- filter(poly_weights, weight >= WEIGHT_THRESHOLD)
 
 treated_unit <- country_donors %>%
   filter(ID == fig_id) %>%
@@ -1032,19 +1050,19 @@ panel_b <- tm_shape(country_poly) +
   tm_borders(lwd = 2) +
   tm_shape(poly_weights) +
   tm_borders(col = "grey80", lwd = 1) +
-  tm_shape(poly_weights_gte_0.01) +
+  tm_shape(poly_weights_threshold) +
   tm_polygons(
     col = "black",
     lwd = 1.5,
     fill = "weight",
     fill.scale = tm_scale_continuous(
-      values = "rd_pu",
+      values = "yl_gn_bu",
       limits = c(0, 0.3),
       outliers.trunc = c(TRUE, TRUE),
       ticks = seq(0, 0.3, 0.1),
       labels = seq(0, 0.3, 0.1)
     ),
-    fill.legend = tm_legend(reverse = TRUE, frame = FALSE, title = "Donor weights\n(>0.01 shown)")
+    fill.legend = tm_legend(reverse = TRUE, frame = FALSE, title = paste0("Donor weights\n(>", WEIGHT_THRESHOLD, " shown)"))
   ) +
   tm_shape(treated_unit) +
   tm_polygons(
@@ -1060,12 +1078,13 @@ panel_b <- tm_shape(country_poly) +
 # Panel C: Time series
 
 weighted_poly_ts <- country_data %>%
-  filter(ID %in% poly_weights_gte_0.01$donor_id) %>%
+  filter(ID %in% poly_weights_threshold$donor_id) %>%
   wide_to_long() %>%
   select(ID, year, loss) %>%
-  left_join(st_drop_geometry(poly_weights_gte_0.01),
+  left_join(st_drop_geometry(poly_weights_threshold),
             by = c("ID" = "donor_id")) %>%
-  filter(year >= 2009)
+  filter(year >= 2009) %>%
+  mutate(loss = 100 * loss)  # Convert from fraction to percentage
 
 example_donor_ts <- weighted_poly_ts %>%
   arrange(desc(weight)) %>%
@@ -1082,18 +1101,18 @@ panel_c <- ggplot(weighted_poly_ts, aes(x = year, y = loss)) +
   
   # Vertical line at start year
   geom_vline(xintercept = 2016, lwd = 0.5, colour = "grey20") +
-  geom_label(label = "Project Start", x = 2016, y = 0.085, size = 6) +
+  geom_label(label = "Project Start", x = 2016, y = 8.5, size = 6) +
   
   # Donor polygons coloured by weight
-  geom_line(aes(group = as.factor(ID), colour = weight), lwd = 0.5, linetype = "dashed", alpha = 0.5) +
-  scale_colour_distiller(type = "seq", palette = "Purples", direction = 1, limits = c(0, 0.3), breaks = seq(0, 0.3, 0.1)) +
+  geom_line(aes(group = as.factor(ID), colour = weight), lwd = 0.75, linetype = "dashed", alpha = 0.5) +
+  scale_colour_distiller(type = "seq", palette = "YlGnBu", direction = 1, values = c(-0.2, 1), limits = c(0, 0.3), breaks = seq(0, 0.3, 0.1)) +
   labs(colour = "Donor weight") +
   
   # Treated unit and synthetic control prediction coloured black and green
   ggnewscale::new_scale_colour() +
   geom_line(data = treated_sc_ts, aes(colour = var, linewidth = var, linetype = var)) +
-  scale_colour_manual(values = c("#4A1486", "green3", "black")) +
-  scale_linewidth_manual(values = c(0.5, 1.5, 1.5)) +
+  scale_colour_manual(values = c("#0c2c84", "green3", "black")) +
+  scale_linewidth_manual(values = c(0.75, 1.5, 1.5)) +
   scale_linetype_manual(values = c(2, 1, 1)) +
   labs(x = "Year", y = "Annual forest loss\n(% of project area)", colour = "Unit", linewidth = "Unit", linetype = "Unit") +
   theme_classic() +
@@ -1103,7 +1122,6 @@ panel_c <- ggplot(weighted_poly_ts, aes(x = year, y = loss)) +
         axis.title = element_text(size = 24),
         legend.title = element_text(size = 24, margin = margin(b = 15)),
         legend.text = element_text(size = 20))
-
 
 tmap_save(panel_a, "results/figures/panel_fig/panel_a.png",
           width = 20, height = 16, units = "cm", dpi = 400)
