@@ -14,6 +14,7 @@
 #' 
 
 get_vector <- function(folder, match = NULL, poly = NULL, source = "gee", ext = ".shp") {
+  
   file_paths <- Sys.glob(paste0(folder, "/*", ext))
   
   if (!is.null(match)) {
@@ -119,9 +120,9 @@ get_raster <- function(folder, match = NULL, names = NULL, ext = ".tif", source 
 #' @title Get raster from tiles
 #' @description 
 #' A function to find and load a Virtual Raster Dataset (VRT) from a collection
-#' of tile-based rasters. Thank you, Robert Hijmans!
+#' of tile-based rasters.
 #' 
-#' @usage get_tiled_raster(folder, layer = NULL)
+#' @usage get_tiled_raster(folder, match = NULL, layer = NULL, names = NULL, ext = ".tif", source = "gee")
 #' 
 #' @param folder character. The name of the dataset folder.
 #' @param layer character or numeric. A vector of names or layer numbers to
