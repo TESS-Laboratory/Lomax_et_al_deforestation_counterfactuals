@@ -154,14 +154,14 @@ strata_n_lookup <- stratum_error_test %>%
          max_error_label_y = max(error_label_y))
 
 panel_plot_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
-                       strip.text = element_text(face = "bold", size = 10),
+                       strip.text = element_text(face = "bold", size = 14),
                        legend.position = "inside",
                        legend.position.inside = c(0.9, 0.25),
                        legend.key.size = unit(1, "cm"),
-                       legend.text = element_text(size = 10),
-                       legend.title = element_text(size = 12),
-                       axis.title = element_text(size = 12),
-                       axis.text = element_text(size = 10),
+                       legend.text = element_text(size = 14),
+                       legend.title = element_text(size = 16),
+                       axis.title = element_text(size = 16),
+                       axis.text = element_text(size = 14),
                        # panel.grid.major = element_blank(),
                        # panel.grid.minor = element_blank()
 )
@@ -223,16 +223,16 @@ sc_df_summary <- sc_df %>%
     mae = mean(abs(sc_loss - loss)),
     bias = mean(sc_loss - loss)
   ) %>%
-  pivot_wider(names_from = "period", values_from = sc("mean_loss", "mean_sc_loss", "mae", "bias")) %>%
+  pivot_wider(names_from = "period", values_from = c("mean_loss", "mean_sc_loss", "mae", "bias")) %>%
   ungroup()
 
 sc_df_central <- filter(sc_df_summary, sim == 4 & match == 8 & poly_size == 60000)
 
 theme_scatter <- theme(
   strip.background = element_rect(fill = "white", colour = "white"),
-  strip.text = element_text(face = "bold", size = 14),
-  axis.text = element_text(size = 12),
-  axis.title = element_text(size = 14)
+  strip.text = element_text(face = "bold", size = 16),
+  axis.text = element_text(size = 14),
+  axis.title = element_text(size = 16)
 )
 
 # Test period bias against test period observed forest loss
@@ -542,11 +542,11 @@ variable_labels <- c(
 )
 
 importance_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
-                          strip.text = element_text(face = "bold", size = 10),
-                          legend.text = element_text(size = 10),
-                          legend.title = element_text(size = 12),
-                          axis.title = element_text(size = 12),
-                          axis.text = element_text(size = 10)
+                          strip.text = element_text(face = "bold", size = 14),
+                          legend.text = element_text(size = 12),
+                          legend.title = element_text(size = 14),
+                          axis.title = element_text(size = 14),
+                          axis.text = element_text(size = 12)
 )
 
 # Importance - all strata
@@ -592,7 +592,7 @@ importance_viz_all <- importance_viz_global + importance_viz_country +
   plot_layout(ncol = 2, axis_titles = "collect")
 
 ggsave(plot = importance_viz_all, filename = "results/figures/importance_plots/importance_all.png",
-       width = 30, height = 24, units = "cm", dpi = 300)
+       width = 32, height = 28, units = "cm", dpi = 300)
 
 # Importance - S3-4 only
 
@@ -648,7 +648,7 @@ importance_viz_all_s34 <- importance_viz_global_s34 + importance_viz_country_s34
   plot_layout(ncol = 2, axis_titles = "collect")
 
 ggsave(plot = importance_viz_all_s34, filename = "results/figures/importance_plots/importance_all_s34.png",
-       width = 30, height = 24, units = "cm", dpi = 300)
+       width = 32, height = 28, units = "cm", dpi = 300)
 
 # importance_viz_global_s234 <- importance_df %>%
 #   filter(stratum >= 2) %>%
@@ -766,7 +766,7 @@ ggsave("results/figures/boxplots/bias_boxplot_by_poly_size.png",
 
 ## 10. RQ3 - Mean absolute error and bias by match period --------
 
-MATCH_SIM <- 5
+MATCH_SIM <- 1
 
 ## WRAP INTO FUNCTION FOR REPRODUCIBILITY (with arguments for simulation, poly_size etc.)
 
