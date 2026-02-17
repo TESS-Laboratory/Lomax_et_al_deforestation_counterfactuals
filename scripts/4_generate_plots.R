@@ -89,6 +89,20 @@ defor <- map(COUNTRIES, function(country) {
 
 ## 3. Visualise SC trajectories --------
 
+## Visualisation theme
+sc_plot_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
+                          strip.text = element_text(face = "bold", size = 12),
+                          legend.position = "right",
+                          # legend.key.size = unit(1, "cm"),
+                          legend.text = element_text(size = 12),
+                          legend.title = element_text(size = 14),
+                          axis.title = element_text(size = 14),
+                          axis.text = element_text(size = 12),
+                          # panel.grid.major = element_blank(),
+                          # panel.grid.minor = element_blank()
+)
+
+
 set.seed(VIZ_SEED)
 sc_sample <- sc_df %>%
   filter(match == 8 & poly_size == 60000) %>%
@@ -107,6 +121,7 @@ sc_sample <- sc_df %>%
 
 ts_plots <- sc_sample %>%
   filter(match == 8 & poly_size == 60000 & year > (START_YEAR - match)) %>%
+  mutate(stratum = paste0("Forest loss bin ", stratum)) %>%
   ggplot(aes(x = as.numeric(year))) +
   geom_line(aes(y = loss, colour = "Observed"), lwd = 1.2) +
   geom_line(aes(y = sc_loss, colour = as.factor(sim))) +
@@ -117,15 +132,14 @@ ts_plots <- sc_sample %>%
   scale_colour_manual(
     # labels = c(paste0("S", 1:5), "Observed"),
     values = c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00', "grey10")) +
-  theme(strip.background = element_rect(fill = "white", colour = "white"),
-        strip.text = element_text(face = "bold"))
+  sc_plot_theme
 
 ts_plots
 
 ggsave(
   paste0("results/figures/sc_plots/", START_YEAR, "_60000_SIM_ts_plots.jpg"),
   ts_plots,
-  width = 24, height = 20, dpi = 300, units = "cm"
+  width = 24, height = 28, dpi = 300, units = "cm"
 )
 
 ## 4. RQ1 - Boxplots of stratum-level performance by simulation --------
@@ -140,6 +154,16 @@ stratum_error_test <- sc_df %>%
   group_by(country, sim, stratum) %>%
   mutate(mean_loss = mean(mean_loss))
 
+# Summary error and bias metrics across (i) all polygons and (ii) by stratum
+
+overall_error_by_sim <- stratum_error_test %>%
+  group_by(sim) %>%
+  summarise(mae_mean = mean(mae), bias_mean = mean(bias))
+
+overall_error_by_sim_stratum <- stratum_error_test %>%
+  group_by(sim, stratum) %>%
+  summarise(mae_mean = mean(mae), bias_mean = mean(bias))
+
 # Lookup table for positioning bin size labels (e.g., n = 25)
 strata_n_lookup <- stratum_error_test %>%
   group_by(country, stratum) %>%
@@ -153,17 +177,18 @@ strata_n_lookup <- stratum_error_test %>%
   mutate(max_bias_label_y = max(bias_label_y),
          max_error_label_y = max(error_label_y))
 
+# Visualisation theme
 panel_plot_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
-                       strip.text = element_text(face = "bold", size = 14),
-                       legend.position = "inside",
-                       legend.position.inside = c(0.9, 0.25),
-                       legend.key.size = unit(1, "cm"),
-                       legend.text = element_text(size = 14),
-                       legend.title = element_text(size = 16),
-                       axis.title = element_text(size = 16),
-                       axis.text = element_text(size = 14),
-                       # panel.grid.major = element_blank(),
-                       # panel.grid.minor = element_blank()
+                          strip.text = element_text(face = "bold", size = 14),
+                          legend.position = "inside",
+                          legend.position.inside = c(0.9, 0.25),
+                          legend.key.size = unit(1, "cm"),
+                          legend.text = element_text(size = 14),
+                          legend.title = element_text(size = 16),
+                          axis.title = element_text(size = 16),
+                          axis.text = element_text(size = 14),
+                          # panel.grid.major = element_blank(),
+                          # panel.grid.minor = element_blank()
 )
 
 # Error boxplot by simulation, bin and country 
@@ -510,11 +535,18 @@ pop_error <- stratum_error %>%
 
 ## 8. RQ1 - Variable importance by country ----
 
-importance_ordered <- importance_df %>%
+importance_country <- importance_df %>%
   group_by(variable, country) %>%
-  summarise(mean_weight = mean(min.loss.w, na.rm = TRUE)) %>%
+  summarise(mean_weight = mean(min.loss.w, na.rm = TRUE),
+            median_weight = median(min.loss.w, na.rm = TRUE),
+            sd_weight = sd(min.loss.w, na.rm = TRUE),
+            iqr_weight = IQR(min.loss.w, na.rm = TRUE)) %>%
+  ungroup()
+
+importance_ordered_global <- importance_country %>%
   group_by(variable) %>%
-  summarise(mean_country_weight = mean(mean_weight, na.rm = TRUE)) %>%
+  summarise(mean_country_weight = mean(mean_weight, na.rm = TRUE),
+            mean_median_weight = mean(median_weight, na.rm = TRUE)) %>%
   arrange(mean_country_weight)
 
 variable_labels <- c(
@@ -551,19 +583,12 @@ importance_theme <- theme(strip.background = element_rect(fill = "white", colour
 
 # Importance - all strata
 
-importance_viz_country <- importance_df %>%
-  mutate(variable = ordered(variable, levels = importance_ordered$variable)) %>%
-  group_by(country, variable) %>%
-  summarise(
-    mean_weight = mean(min.loss.w),
-    median_weight = median(min.loss.w),
-    uq_weight = quantile(min.loss.w, 0.75),
-    lq_weight = quantile(min.loss.w, 0.25)
-  ) %>%
+importance_viz_country <- importance_country %>%
+  mutate(variable = ordered(variable, levels = importance_ordered_global$variable)) %>%
   ggplot(aes(y = variable)) +
   # geom_boxplot(aes(x = min.loss.w), coef = 10) +
   # scale_x_log10() +
-  geom_point(aes(x = mean_weight), colour = "darkred") +
+  geom_point(aes(x = median_weight), colour = "darkred") +
   # geom_errorbar(aes(xmin = lq_weight, xmax = uq_weight), alpha = 0.6) +
   facet_wrap(~country) +
   theme_bw() +
@@ -571,8 +596,8 @@ importance_viz_country <- importance_df %>%
   labs(x = "Mean weight", y = "Variable") +
   importance_theme
 
-importance_viz_global <- importance_df %>%
-  mutate(variable = ordered(variable, levels = importance_ordered$variable)) %>%
+importance_viz_global <- importance_ordered_global %>%
+  mutate(variable = ordered(variable, levels = importance_ordered_global$variable)) %>%
   group_by(country, variable) %>%
   summarise(mean_weight = mean(min.loss.w)) %>%
   group_by(variable) %>%
@@ -766,7 +791,7 @@ ggsave("results/figures/boxplots/bias_boxplot_by_poly_size.png",
 
 ## 10. RQ3 - Mean absolute error and bias by match period --------
 
-MATCH_SIM <- 1
+MATCH_SIM <- 4
 
 ## WRAP INTO FUNCTION FOR REPRODUCIBILITY (with arguments for simulation, poly_size etc.)
 
@@ -787,6 +812,11 @@ stratum_error_bias_summary <- stratum_error_by_match %>%
             stratum_bias_upper = max(bias),
             stratum_bias_lower = min(bias)) %>%
   ungroup()
+
+stratum_error_bias_overall <- stratum_error_by_match %>%
+  group_by(stratum, sim, match) %>%
+  summarise(mean_bias = mean(bias),
+            mean_error = mean(mae))
 
 stratum_error_match_viz <- ggplot(
   stratum_error_bias_summary,
@@ -900,12 +930,19 @@ year_label_df <- data.frame(
   label = "Project start"
 )
 
-annual_bias_rq4_viz <- ggplot(annual_performance_rq4, aes(x = year, y = mean_bias, colour = as.factor(stratum))) +
+annual_performance_rq4_smoothed <- annual_performance_rq4 %>%
+  group_by(country, stratum) %>%
+  mutate(bias_smoothed = (ksmooth(year, mean_bias, kernel = "normal", bandwidth = 7, x.points = year))$y,
+         mae_smoothed = (ksmooth(year, mean_error, kernel = "normal", bandwidth = 7, x.points = year))$y)
+
+annual_bias_rq4_viz <- ggplot(annual_performance_rq4_smoothed, aes(x = year, colour = as.factor(stratum))) +
   geom_hline(yintercept = 0, colour = "grey20") +
   geom_vline(xintercept = 1998, colour = "grey20", lwd = 1) +
   # geom_ribbon(aes(ymin = min_bias, ymax = max_bias), colour = NA, alpha = 0.2) +
   # geom_rect(xmin = 1991, ymin = -0.04, xmax = 1998, ymax = 0.01, fill = "grey90", colour = "grey90", alpha = 0.5) +
-  geom_line(alpha = 0.8, lwd = 0.8) +
+  geom_line(aes(y = mean_bias), alpha = 0.3, lwd = 0.6) +
+  geom_line(aes(y = bias_smoothed), alpha = 0.8, lwd = 1) +
+  # geom_smooth(se = FALSE) +
   # geom_point() +
   geom_label(data = year_label_df, label = "Project start", aes(x = x, y = y), fill = "white", colour = "grey20", size = 3) +
   facet_wrap(~country, ncol = 5, nrow = 2) +
@@ -914,11 +951,19 @@ annual_bias_rq4_viz <- ggplot(annual_performance_rq4, aes(x = year, y = mean_bia
   # coord_cartesian(ylim = c(-10, 10)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Year", y = "Mean bias\n(% of polygon area)", colour = "Forest loss bin") +
-  panel_plot_theme
+  panel_plot_theme +
+  theme
 
 ggsave("results/figures/line_plots/bias_rq4.png",
        annual_bias_rq4_viz,
        width = 32, height = 16, units = "cm", dpi = 300)
+
+bias_var <- sc_df_rq4 %>%
+  mutate(loss = 100 * loss,
+         sc_loss = 100 * sc_loss,
+         bias = sc_loss - loss,
+         
+  )
 
 ## 12. Sampling scheme map figures ----
 
