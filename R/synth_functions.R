@@ -169,7 +169,7 @@ get_formula <- function(sim, econ = TRUE) {
     augsynth_formula <- paste0(augsynth_formula, "+ grp_pc_usd_2015 + ag_grp_frac")
   }
   
-  formula(augsynth_formula)
+  augsynth_formula
 }
 
 #' @title Prepare outcome data
@@ -197,7 +197,6 @@ prepare_outcomes <- function(sim, outcome_ts, pt, cumulative) {
   outcome_ts
 }
 
-
 #' @title Run synthetic control
 #' @description Helper function to run augmented synthetic control algorithm
 #' with specified default settings based on the simulation number provided
@@ -215,8 +214,9 @@ prepare_outcomes <- function(sim, outcome_ts, pt, cumulative) {
 
 run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FALSE, out_model = "Ridge") {
   
-  formula <- get_formula(sim, econ = econ)
+  augsynth_formula <- get_formula(sim, econ = econ)
   
+  # Filter donors to those in the same biome for S4 and S5
   if (sim %in% c(4, 5)) {
     data <- filter(data, shared_biome == 1)
     
@@ -227,6 +227,26 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FA
     }
   }
   
+  # Remove covariates without any internal variation
+  cols_with_variation <- data %>%
+    group_by(ID) %>%
+    summarise(across(everything(), mean)) %>%
+    ungroup() %>%
+    summarise(across(everything(), function(x) (var(x) > 0))) %>%
+    pivot_longer(cols = everything(), names_to = "colname", values_to = "variation")
+  
+  # Remove zero-variation variable(s) from formula
+  
+  if (mean(cols_with_variation$variation) < 1) {
+    zero_variation_cols <- filter(cols_with_variation, variation == FALSE)$colname
+    
+    for (i in zero_variation_cols) {
+      augsynth_formula <- str_replace(augsynth_formula, paste0(i, " \\+"), "")
+    }
+  }
+  
+  augsynth_formula <- formula(augsynth_formula)
+  
   data_prepared <- data %>%
     filter(year > (START_YEAR - match)) %>%
     group_by(ID) %>%
@@ -236,7 +256,7 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FA
   augsynth_safe <- possibly(augsynth, otherwise = NA, quiet = FALSE)
   
   synth <- augsynth_safe(
-    form = formula,
+    form = augsynth_formula,
     unit = ID,
     time = year,
     data = data_prepared,
