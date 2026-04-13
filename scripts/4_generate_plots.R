@@ -8,7 +8,7 @@ source("scripts/load.R")
 # Data selection
 COUNTRIES <- c(
   "Bolivia",
-  "Brazil",
+  # "Brazil",
   "Colombia",
   "Cote d'Ivoire",
   "Democratic Republic of the Congo",
@@ -57,6 +57,7 @@ sc_df <- map(COUNTRIES, function(country) {
 }) %>% bind_rows() %>%
   mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country)) %>%
   mutate(sc_loss = 100 * sc_loss, loss = 100 * loss)
+
 
 # Variable importance by country
 importance_df <- map(COUNTRIES, function(country) {
@@ -958,14 +959,154 @@ ggsave("results/figures/line_plots/bias_rq4.png",
        annual_bias_rq4_viz,
        width = 32, height = 16, units = "cm", dpi = 300)
 
-bias_var <- sc_df_rq4 %>%
-  mutate(loss = 100 * loss,
-         sc_loss = 100 * sc_loss,
-         bias = sc_loss - loss,
-         
+## 12. Comparison of bias for filtered vs unfiltered donor pool ----
+
+# Load SC results for filtered donor pools
+sc_df_filtered <- map(COUNTRIES, function(country) {
+  country_df <- map(POLY_SIZE, function(size) {
+    filename <- paste0("sc_results_", country, "_", START_YEAR, "_", size, cumulative_flag, "_FILTERED.csv")
+    if(file.exists(paste0("results/sc_results/", filename))) {
+      df <- read_csv(paste0("results/sc_results/", filename)) %>%
+        mutate(poly_size = size)
+      df
+    } else {
+      NULL
+    }
+  }) %>% 
+    purrr::discard(\(x) is.null(x)) %>%
+    purrr::discard(\(x) nrow(x) == 0) %>%
+    bind_rows()
+  
+  country_df <- mutate(country_df, country = country)
+  
+  country_df
+}) %>% bind_rows() %>%
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country)) %>%
+  mutate(sc_loss = 100 * sc_loss, loss = 100 * loss)
+
+# Join to compare filtered vs. unfiltered values and calculate error/bias
+filtered_vs_unfiltered <- sc_df %>%
+  filter(sim == 4 & match == 8 & poly_size == 60000) %>%
+  left_join(
+    sc_df_filtered,
+    by = c("sim", "match", "poly_size", "ID", "stratum", "year", "country"),
+    suffix = c("_unfiltered", "_filtered"))
+
+filtered_vs_unfiltered_error <- filtered_vs_unfiltered %>%
+  filter(year > START_YEAR) %>%
+  group_by(country, stratum, sim, poly_size, match, ID) %>%
+  summarise(
+    mean_loss_unfiltered = mean(loss_unfiltered),
+    mean_sc_loss_unfiltered = mean(sc_loss_unfiltered),
+    mean_loss_filtered = mean(loss_filtered),
+    mean_sc_loss_filtered = mean(sc_loss_filtered),
+    mae_unfiltered = mean(abs(sc_loss_unfiltered - loss_unfiltered)),
+    bias_unfiltered = mean(sc_loss_unfiltered - loss_unfiltered),
+    mae_filtered = mean(abs(sc_loss_filtered - loss_filtered)),
+    bias_filtered = mean(sc_loss_filtered - loss_filtered)
   )
 
-## 12. Sampling scheme map figures ----
+# Plot bias vs. observed loss rate for filtered donor SCs
+
+continuous_viz_bias_loss_country_filtered <- ggplot(filtered_vs_unfiltered_error, aes(x = mean_loss_filtered, y = bias_filtered)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.5, show.legend = FALSE, alpha = 0.5) +
+  facet_wrap(~country, scales = "fixed") +
+  theme_bw() +
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "Bias in post-intervention period\n(% of project area)")
+
+continuous_viz_bias_loss_global_filtered <- filtered_vs_unfiltered_error %>%
+  mutate(panel_label = "All countries") %>%
+  ggplot(aes(x = mean_loss_filtered, y = bias_filtered)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_point(size = 1.2, alpha = 0.5) +
+  facet_wrap(~panel_label) +
+  # geom_smooth(method = "loess", colour = "steelblue") +
+  # coord_cartesian(ylim = c(-2, 2)) +
+  theme_bw() +
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "Bias in post-intervention period\n(% of project area)")
+
+continuous_viz_bias_loss_all_filtered <- continuous_viz_bias_loss_global_filtered +
+  continuous_viz_bias_loss_country_filtered +
+  plot_layout(axis_titles = "collect") &
+  theme_scatter
+
+continuous_viz_bias_loss_all_filtered
+
+# Plot MAE vs. observed loss rate for filtered donor SCs
+continuous_viz_mae_loss_country_filtered <- ggplot(filtered_vs_unfiltered_error, aes(x = mean_loss_filtered, y = mae_filtered)) +
+  geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
+  geom_point(size = 0.5, show.legend = FALSE, alpha = 0.5) +
+  facet_wrap(~country, scales = "fixed") +
+  theme_bw() +
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "MAE in post-intervention period\n(% of project area)")
+
+continuous_viz_mae_loss_global_filtered <- filtered_vs_unfiltered_error %>%
+  mutate(panel_label = "All countries") %>%
+  ggplot(aes(x = mean_loss_filtered, y = mae_filtered)) +
+  geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
+  geom_point(size = 1.2, alpha = 0.5) +
+  facet_wrap(~panel_label) +
+  # geom_smooth(method = "loess", colour = "steelblue") +
+  # coord_cartesian(ylim = c(-2, 2)) +
+  theme_bw() +
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "MAE in post-intervention period\n(% of project area)")
+
+continuous_viz_mae_loss_all_filtered <- continuous_viz_mae_loss_global_filtered +
+  continuous_viz_mae_loss_country_filtered +
+  plot_layout(axis_titles = "collect") &
+  theme_scatter
+
+continuous_viz_mae_loss_all_filtered
+
+ggsave("results/figures/scatter_plots/continuous_viz_bias_loss_all_filtered.png",
+       continuous_viz_bias_loss_all_filtered,
+       width = 30, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/scatter_plots/continuous_viz_mae_loss_all_filtered.png",
+       continuous_viz_mae_loss_all_filtered,
+       width = 30, height = 16, units = "cm", dpi = 300)
+
+# Plot filtered vs. unfiltered error and bias
+
+filtered_vs_unfiltered_mae <- ggplot(filtered_vs_unfiltered_error, aes(x = mae_unfiltered, y = mae_filtered)) +
+  # geom_vline(xintercept = 0, colour = "grey60") +
+  # geom_hline(yintercept = 0, colour = "grey60") +
+  geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
+  geom_point(size = 1.2, alpha = 0.5) +
+  facet_wrap(~stratum, scales = "fixed", labeller = as_labeller(function(x) paste0("Forest loss bin ", x))) +
+  xlim(0, 5) + ylim(0, 5) +
+  theme_bw() +
+  theme_scatter +
+  labs(x = "Post-intervention MAE - unfiltered donor pool\n(% of project area)",
+       y = "Post-intervention MAE - filtered donor pool\n(% of project area)")
+
+
+filtered_vs_unfiltered_bias <- ggplot(filtered_vs_unfiltered_error, aes(x = bias_unfiltered, y = bias_filtered)) +
+  geom_vline(xintercept = 0, colour = "grey60") +
+  geom_hline(yintercept = 0, colour = "grey60") +
+  geom_abline(slope = 1, intercept = 0, colour = "#F8766D") +
+  geom_point(size = 1.2, alpha = 0.5) +
+  facet_wrap(~stratum, scales = "fixed", labeller = as_labeller(function(x) paste0("Forest loss bin ", x))) +
+  xlim(-5, 5) + ylim(-5, 5) +
+  theme_bw() +
+  theme_scatter +
+  labs(x = "Post-intervention bias - unfiltered donor pool\n(% of project area)",
+       y = "Post-intervention bias - filtered donor pool\n(% of project area)")
+
+ggsave("results/figures/scatter_plots/filtered_vs_unfiltered_mae.png",
+       filtered_vs_unfiltered_mae,
+       width = 20, height = 16, units = "cm", dpi = 300)
+
+ggsave("results/figures/scatter_plots/filtered_vs_unfiltered_bias.png",
+       filtered_vs_unfiltered_bias,
+       width = 20, height = 16, units = "cm", dpi = 300)
+
+## 13. Sampling scheme map figures ----
 
 # Load data lookup table (needed for data loading functions)
 
