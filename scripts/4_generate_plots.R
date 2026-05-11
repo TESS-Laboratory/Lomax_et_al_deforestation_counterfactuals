@@ -8,7 +8,7 @@ source("scripts/load.R")
 # Data selection
 COUNTRIES <- c(
   "Bolivia",
-  # "Brazil",
+  "Brazil",
   "Colombia",
   "Cote d'Ivoire",
   "Democratic Republic of the Congo",
@@ -36,7 +36,7 @@ country_polys <- map(COUNTRIES, gadm, level = 0, path = "data/raw/vector/gadm") 
 # SC results by country
 cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
 
-sc_df <- map(COUNTRIES, function(country) {
+sc_results_df <- map(COUNTRIES, function(country) {
   country_df <- map(POLY_SIZE, function(size) {
     filename <- paste0("sc_results_", country, "_", START_YEAR, "_", size, cumulative_flag, ".csv")
     if(file.exists(paste0("results/sc_results/", filename))) {
@@ -105,7 +105,7 @@ sc_plot_theme <- theme(strip.background = element_rect(fill = "white", colour = 
 
 
 set.seed(VIZ_SEED)
-sc_sample <- sc_df %>%
+sc_sample <- sc_results_df %>%
   filter(match == 8 & poly_size == 60000) %>%
   group_by(country, ID) %>%
   summarise(ID_all = cur_group_id(),
@@ -115,7 +115,7 @@ sc_sample <- sc_df %>%
   arrange(desc(mean_loss), .by_group = TRUE) %>%
   slice_sample(n = 1) %>%
   # mutate(country_id = LETTERS[1:n()]) %>%
-  left_join(sc_df) %>%
+  left_join(sc_results_df) %>%
   group_by(country) %>%
   mutate(max_loss = max(c(loss, sc_loss))) %>%
   ungroup()
@@ -146,7 +146,7 @@ ggsave(
 ## 4. RQ1 - Boxplots of stratum-level performance by simulation --------
 
 # Filter to RQ1 simulations and calculate simulation-level MAE and bias
-stratum_error_test <- sc_df %>%
+stratum_error_test <- sc_results_df %>%
   filter(match == 8 & poly_size == 60000 & year > START_YEAR) %>%
   group_by(country, sim, ID, stratum) %>%
   summarise(mae = mean(abs(sc_loss - loss)),
@@ -240,7 +240,7 @@ ggsave("results/figures/boxplots/strata_bias_boxplots_by_sim.png",
 ## 5. RQ1 - Continuous plots of MAE and bias vs. observed forest loss --------
 
 # Create summary df for easier plotting
-sc_df_summary <- sc_df %>%
+sc_df_summary <- sc_results_df %>%
   mutate(period = ifelse(year > START_YEAR, "test", "matching")) %>%
   group_by(country, sim, poly_size, match, period, ID, stratum) %>%
   summarise(
@@ -505,7 +505,7 @@ stratum_freq <- defor_long_loss %>%
 
 # Back-calculate population-level errors for each country and polygon size (for text)
 
-stratum_error <- sc_df %>%
+stratum_error <- sc_results_df %>%
   filter(year > START_YEAR) %>%
   group_by(country, poly_size, match, stratum, sim, ID) %>%
   summarise(mae = abs(mean(sc_loss) - mean(loss)) * 100,
@@ -746,7 +746,7 @@ ggsave(plot = importance_viz_all_s34, filename = "results/figures/importance_plo
 
 # Boxplots of performance range by polygon size
 
-stratum_error_test_poly_size <- sc_df %>%
+stratum_error_test_poly_size <- sc_results_df %>%
   filter(match == 8 & sim == 4 & year > START_YEAR) %>%
   group_by(country, poly_size, ID, stratum) %>%
   summarise(mae = mean(abs(sc_loss - loss)),
@@ -796,7 +796,7 @@ MATCH_SIM <- 4
 
 ## WRAP INTO FUNCTION FOR REPRODUCIBILITY (with arguments for simulation, poly_size etc.)
 
-stratum_error_by_match <- sc_df %>%
+stratum_error_by_match <- sc_results_df %>%
   filter(poly_size == 60000 & year > START_YEAR) %>%
   group_by(country, ID, stratum, match, sim) %>%
   summarise(mean_loss = mean(loss),
@@ -962,39 +962,32 @@ ggsave("results/figures/line_plots/bias_rq4.png",
 ## 12. Comparison of bias for filtered vs unfiltered donor pool ----
 
 # Load SC results for filtered donor pools
-sc_df_filtered <- map(COUNTRIES, function(country) {
-  country_df <- map(POLY_SIZE, function(size) {
-    filename <- paste0("sc_results_", country, "_", START_YEAR, "_", size, cumulative_flag, "_FILTERED.csv")
-    if(file.exists(paste0("results/sc_results/", filename))) {
-      df <- read_csv(paste0("results/sc_results/", filename)) %>%
-        mutate(poly_size = size)
-      df
+sc_results_df_filtered <- map(COUNTRIES, function(country) {
+  filename <- paste0("sc_results_", country, "_2016_60000_filtered.csv")
+  if(file.exists(paste0("results/sc_results/", filename))) {
+    read_csv(paste0("results/sc_results/", filename)) %>%
+      mutate(country = country)
     } else {
-      NULL
+    NULL
     }
   }) %>% 
-    purrr::discard(\(x) is.null(x)) %>%
-    purrr::discard(\(x) nrow(x) == 0) %>%
-    bind_rows()
-  
-  country_df <- mutate(country_df, country = country)
-  
-  country_df
-}) %>% bind_rows() %>%
+  purrr::discard(\(x) is.null(x)) %>%
+  purrr::discard(\(x) nrow(x) == 0) %>%
+  bind_rows() %>%
   mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country)) %>%
   mutate(sc_loss = 100 * sc_loss, loss = 100 * loss)
 
 # Join to compare filtered vs. unfiltered values and calculate error/bias
-filtered_vs_unfiltered <- sc_df %>%
+filtered_vs_unfiltered <- sc_results_df %>%
   filter(sim == 4 & match == 8 & poly_size == 60000) %>%
   left_join(
-    sc_df_filtered,
-    by = c("sim", "match", "poly_size", "ID", "stratum", "year", "country"),
+    sc_results_df_filtered,
+    by = c("sim", "ID", "stratum", "year", "country"),
     suffix = c("_unfiltered", "_filtered"))
 
 filtered_vs_unfiltered_error <- filtered_vs_unfiltered %>%
   filter(year > START_YEAR) %>%
-  group_by(country, stratum, sim, poly_size, match, ID) %>%
+  group_by(country, stratum, sim, ID) %>%
   summarise(
     mean_loss_unfiltered = mean(loss_unfiltered),
     mean_sc_loss_unfiltered = mean(sc_loss_unfiltered),
@@ -1008,32 +1001,46 @@ filtered_vs_unfiltered_error <- filtered_vs_unfiltered %>%
 
 # Plot bias vs. observed loss rate for filtered donor SCs
 
-continuous_viz_bias_loss_country_filtered <- ggplot(filtered_vs_unfiltered_error, aes(x = mean_loss_filtered, y = bias_filtered)) +
-  geom_hline(yintercept = 0, colour = "#F8766D") +
-  geom_point(size = 0.5, show.legend = FALSE, alpha = 0.5) +
-  facet_wrap(~country, scales = "fixed") +
-  theme_bw() +
-  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
-       y = "Bias in post-intervention period\n(% of project area)")
+# continuous_viz_bias_loss_country_filtered <- ggplot(filtered_vs_unfiltered_error, aes(x = mean_loss_filtered, y = bias_filtered)) +
+#   geom_hline(yintercept = 0, colour = "#F8766D") +
+#   geom_point(size = 0.5, show.legend = FALSE, alpha = 0.5) +
+#   facet_wrap(~country, scales = "fixed") +
+#   theme_bw() +
+#   labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+#        y = "Bias in post-intervention period\n(% of project area)")
 
 continuous_viz_bias_loss_global_filtered <- filtered_vs_unfiltered_error %>%
-  mutate(panel_label = "All countries") %>%
+  mutate(panel_label = "Filtered donor pool") %>%
   ggplot(aes(x = mean_loss_filtered, y = bias_filtered)) +
   geom_hline(yintercept = 0, colour = "#F8766D") +
   geom_point(size = 1.2, alpha = 0.5) +
   facet_wrap(~panel_label) +
-  # geom_smooth(method = "loess", colour = "steelblue") +
-  # coord_cartesian(ylim = c(-2, 2)) +
+  ylim(-6, 4) +
   theme_bw() +
   labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
        y = "Bias in post-intervention period\n(% of project area)")
 
-continuous_viz_bias_loss_all_filtered <- continuous_viz_bias_loss_global_filtered +
-  continuous_viz_bias_loss_country_filtered +
+continuous_viz_bias_loss_global_unfiltered <- filtered_vs_unfiltered_error %>%
+  mutate(panel_label = "Unfiltered donor pool") %>%
+  ggplot(aes(x = mean_loss_unfiltered, y = bias_unfiltered)) +
+  geom_hline(yintercept = 0, colour = "#F8766D") +
+  geom_point(size = 1.2, alpha = 0.5) +
+  facet_wrap(~panel_label) +
+  ylim(-6, 4) +
+  theme_bw() +
+  labs(x = "Annual forest loss in post-intervention period\n(% of project area)",
+       y = "Bias in post-intervention period\n(% of project area)")
+
+continuous_viz_filtered_vs_unfiltered_bias <- continuous_viz_bias_loss_global_filtered +
+  continuous_viz_bias_loss_global_unfiltered +
   plot_layout(axis_titles = "collect") &
   theme_scatter
 
-continuous_viz_bias_loss_all_filtered
+continuous_viz_filtered_vs_unfiltered_bias
+
+ggsave("results/figures/scatter_plots/filtered_vs_unfiltered_bias.png",
+       continuous_viz_filtered_vs_unfiltered_bias,
+       units = "cm", width = 30, height = 16, dpi = 300)
 
 # Plot MAE vs. observed loss rate for filtered donor SCs
 continuous_viz_mae_loss_country_filtered <- ggplot(filtered_vs_unfiltered_error, aes(x = mean_loss_filtered, y = mae_filtered)) +
@@ -1153,7 +1160,7 @@ country_donors <- paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_da
 
 country_data <- read_rds(paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_data.rds"))
 
-country_results <- sc_df %>%
+country_results <- sc_results_df %>%
   filter(country == EXAMPLE_COUNTRY & sim == 4 & match == 8 & poly_size == 60000)
 
 country_synth <- paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_sc_results.rds") %>%
