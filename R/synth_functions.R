@@ -166,11 +166,38 @@ get_formula <- function(sim, econ = TRUE) {
   }
   
   if (econ == TRUE & (sim != 1)) {
-    augsynth_formula <- paste0(augsynth_formula, "+ grp_pc_usd_2015 + ag_grp_frac")
+    augsynth_formula <- paste0(augsynth_formula, " + grp_pc_usd_2015 + ag_grp_frac")
   }
   
   augsynth_formula
 }
+
+#' @title Remove formula terms
+#' @description Removes specified terms from formula string (e.g., if zero
+#' variability is present in those terms)
+#' 
+#' @usage remove_formula_terms(formula_string, terms_to_remove)
+#' 
+#' @param formula_string character. The formula as a string
+#' @param terms_to_remove character. A vector of variable strings to remove
+
+remove_formula_terms <- function(formula_string, terms_to_remove) {
+  
+  cleaned <- formula_string
+  
+  # Remove each term (handles + and whitespace around it)
+  for (i in terms_to_remove) {
+    # Pattern matches: optional whitespace, +, optional whitespace, term, optional whitespace
+    pattern <- str_c("\\s*\\+\\s*", i, "\\s*")
+    cleaned <- str_remove_all(cleaned, pattern)
+  }
+  
+  # Clean up any extra whitespace
+  cleaned <- str_squish(cleaned)
+  
+  cleaned
+}
+
 
 #' @title Prepare outcome data
 #' @description Adjusts the pre-intervention outcome data according to the simulation
@@ -219,12 +246,6 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FA
   # Filter donors to those in the same biome for S4 and S5
   if (sim %in% c(4, 5)) {
     data <- filter(data, shared_biome == 1)
-    
-    shared_eco_list <- filter(data, eco_frac_shared != 0)
-    
-    if (length(unique(shared_eco_list$ID)) == 1) {
-      return(NA)
-    }
   }
   
   # Remove covariates without any internal variation
@@ -237,13 +258,9 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FA
   
   # Remove zero-variation variable(s) from formula
   
-  if (mean(cols_with_variation$variation) < 1) {
-    zero_variation_cols <- filter(cols_with_variation, variation == FALSE)$colname
-    
-    for (i in zero_variation_cols) {
-      augsynth_formula <- str_replace(augsynth_formula, paste0(i, " \\+"), "")
-    }
-  }
+  zero_variation_vars <- filter(cols_with_variation, variation == FALSE)$colname
+  
+  augsynth_formula <- remove_formula_terms(augsynth_formula, zero_variation_vars)
   
   augsynth_formula <- formula(augsynth_formula)
   
