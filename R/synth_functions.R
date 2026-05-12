@@ -166,11 +166,38 @@ get_formula <- function(sim, econ = TRUE) {
   }
   
   if (econ == TRUE & (sim != 1)) {
-    augsynth_formula <- paste0(augsynth_formula, "+ grp_pc_usd_2015 + ag_grp_frac")
+    augsynth_formula <- paste0(augsynth_formula, " + grp_pc_usd_2015 + ag_grp_frac")
   }
   
-  formula(augsynth_formula)
+  augsynth_formula
 }
+
+#' @title Remove formula terms
+#' @description Removes specified terms from formula string (e.g., if zero
+#' variability is present in those terms)
+#' 
+#' @usage remove_formula_terms(formula_string, terms_to_remove)
+#' 
+#' @param formula_string character. The formula as a string
+#' @param terms_to_remove character. A vector of variable strings to remove
+
+remove_formula_terms <- function(formula_string, terms_to_remove) {
+  
+  cleaned <- formula_string
+  
+  # Remove each term (handles + and whitespace around it)
+  for (i in terms_to_remove) {
+    # Pattern matches: optional whitespace, +, optional whitespace, term, optional whitespace
+    pattern <- str_c("\\s*\\+\\s*", i, "\\s*")
+    cleaned <- str_remove_all(cleaned, pattern)
+  }
+  
+  # Clean up any extra whitespace
+  cleaned <- str_squish(cleaned)
+  
+  cleaned
+}
+
 
 #' @title Prepare outcome data
 #' @description Adjusts the pre-intervention outcome data according to the simulation
@@ -197,7 +224,6 @@ prepare_outcomes <- function(sim, outcome_ts, pt, cumulative) {
   outcome_ts
 }
 
-
 #' @title Run synthetic control
 #' @description Helper function to run augmented synthetic control algorithm
 #' with specified default settings based on the simulation number provided
@@ -215,17 +241,28 @@ prepare_outcomes <- function(sim, outcome_ts, pt, cumulative) {
 
 run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FALSE, out_model = "Ridge") {
   
-  formula <- get_formula(sim, econ = econ)
+  augsynth_formula <- get_formula(sim, econ = econ)
   
+  # Filter donors to those in the same biome for S4 and S5
   if (sim %in% c(4, 5)) {
     data <- filter(data, shared_biome == 1)
-    
-    shared_eco_list <- filter(data, eco_frac_shared != 0)
-    
-    if (length(unique(shared_eco_list$ID)) == 1) {
-      return(NA)
-    }
   }
+  
+  # Remove covariates without any internal variation
+  cols_with_variation <- data %>%
+    group_by(ID) %>%
+    summarise(across(everything(), mean)) %>%
+    ungroup() %>%
+    summarise(across(everything(), function(x) (var(x) > 0))) %>%
+    pivot_longer(cols = everything(), names_to = "colname", values_to = "variation")
+  
+  # Remove zero-variation variable(s) from formula
+  
+  zero_variation_vars <- filter(cols_with_variation, variation == FALSE)$colname
+  
+  augsynth_formula <- remove_formula_terms(augsynth_formula, zero_variation_vars)
+  
+  augsynth_formula <- formula(augsynth_formula)
   
   data_prepared <- data %>%
     filter(year > (START_YEAR - match)) %>%
@@ -236,7 +273,7 @@ run_synthetic_control <- function(sim, match, data, econ = TRUE, cumulative = FA
   augsynth_safe <- possibly(augsynth, otherwise = NA, quiet = FALSE)
   
   synth <- augsynth_safe(
-    form = formula,
+    form = augsynth_formula,
     unit = ID,
     time = year,
     data = data_prepared,
