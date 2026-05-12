@@ -18,7 +18,7 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Colombia"  # Target country
+COUNTRY <- "Brazil"  # Target country
 START_YEAR <- 2016 # Simulated start year of protection project
 MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
@@ -47,19 +47,14 @@ if (length(cmd_args) == 5) {
 cat("Fitting synthetic controls for ", COUNTRY, "- Start Year: ", START_YEAR, ", Polygon Size: ", POLY_SIZE, " ha")
 
 # Simulations to run by RQ
-if (START_YEAR == 2016 & POLY_SIZE == 60000) {
+if (START_YEAR == 2016 & POLY_SIZE == 60000 & DONOR_FILTER == FALSE) {
   # RQ1 and RQ3
   simulation_match_df <- read_csv("data/raw/csv/simulation_list_60000.csv")
   
 } else {
-  # RQ2
+  # RQ2 or donor filter test
   simulation_match_df <- tibble(sim = 4, match = 8)
   
-}
-
-# Limit to 8-year matching period for donor filtering test
-if (DONOR_FILTER == TRUE) {
-  simulation_match_df <- filter(simulation_match_df, match == 8)
 }
 
 # Parallelisation
@@ -81,19 +76,19 @@ sample_ids <- grid_data %>%
   filter(!is.na(stratum)) %>%
   mutate(n_donors = NA, final_filter_range = NA)
 
-# Filter potential donors based on prior deforestation rates or MAX_POOL
+# # Filter potential donors based on prior deforestation rates or MAX_POOL
 # if (nrow(grid_data) > MAX_POOL) {
 #   message("Donor pool too large; reducing to ", MAX_POOL)
-#   
+# 
 #   n_sample <- nrow(sample_ids)
 #   grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
-#   
+# 
 #   set.seed(SEED)
 #   n_pool <- MAX_POOL - n_sample
 #   grid_data_pool <- grid_data %>%
 #     filter(!(ID %in% sample_ids$ID)) %>%
 #     slice_sample(n = n_pool)
-#   
+# 
 #   grid_data <- bind_rows(grid_data_sample, grid_data_pool)
 # }
 
@@ -185,7 +180,9 @@ toc()
 
 # Convert back to time series of observed and modeled forest loss for each unit
 
-write_rds(sc_results, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results_FILTERED.rds"))
+
+
+write_rds(sc_results, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results.rds"))
 
 sc_df <- sc_results %>%
   bind_rows() %>%
