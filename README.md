@@ -1,6 +1,6 @@
 # Lomax_et_al_deforestation_counterfactuals
-Refining the assessment of tropical deforestation baseline scenarios using synthetic controls and other methods.
 
+Codebase for "Synthetic controls underestimate deforestation in high-loss tropical forests" by Guy Lomax, Andrew Cunliffe, Hugh Graham, Christopher Philipson, Ted Feldpausch, Emily Doyle, Jessica Thomas, Edward Mitchard, and David Burslem.
 
 The experimental design for this study was pre-registered with the Open Science Framework (https://osf.io/w57a2). 
 
