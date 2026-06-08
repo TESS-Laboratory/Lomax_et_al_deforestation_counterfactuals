@@ -338,6 +338,22 @@ run_synthetic_control_mscmt <- function(id, match, data) {
                         "ag_grp_frac" = c(START_YEAR - match2, START_YEAR))
   }
   
+  # Remove zero-variance covariates
+  # Remove covariates without any internal variation
+  cols_with_variation <- data %>%
+    group_by(ID) %>%
+    summarise(across(everything(), mean)) %>%
+    ungroup() %>%
+    summarise(across(everything(), function(x) (var(x) > 0))) %>%
+    pivot_longer(cols = everything(), names_to = "colname", values_to = "variation")
+  
+  # Remove zero-variation variable(s) from formula
+  
+  zero_variation_vars <- filter(cols_with_variation, variation == FALSE)$colname
+  
+  times_pred <- times_pred[, !colnames(times_pred) %in% zero_variation_vars]
+  
+  # Define and run mscmt function
   mscmt_safe <- possibly(mscmt, otherwise = NA, quiet = FALSE)
   
   synth <- mscmt_safe(
