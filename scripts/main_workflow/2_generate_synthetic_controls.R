@@ -18,14 +18,14 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Data selection
-COUNTRY <- "Brazil"  # Target country
+COUNTRY <- "Colombia"  # Target country
 START_YEAR <- 2016 # Simulated start year of protection project
 MATCHING_PERIODS <- 8  # Length of pre-intervention period to use for matching (years)
 POLY_SIZE <- 60000 # size of polygons in hectares
 SEED <- 1471
 MAX_POOL <- 1000  # Max number of potential donor polygons to constrain
 MIN_POOL <- 20  # Minimum donors to proceed with fitting
-DONOR_FILTER <- TRUE  # Filter donor pool based on prior buffer deforestation rates?
+DONOR_FILTER <- FALSE  # Filter donor pool based on prior buffer deforestation rates?
 FILTER_START <- 2009  # Start year for calculating prior buffer deforestation rates
 FILTER_THRESHOLD <- 0.1  # fractional range to filter prior buffer deforestation rates
 N_CORES <- 1
@@ -156,6 +156,8 @@ sc_results <- future_map(sample_ids$ID, function(id) {
     
     grid_data_prepared <- filter(grid_data_prepared, ID %in% c(id, donors_filtered$ID))
     
+  } else {
+    n_donors <- length(unique(grid_data_prepared$ID)) - 1
   }
   
   
@@ -165,8 +167,8 @@ sc_results <- future_map(sample_ids$ID, function(id) {
   sim_df <- simulation_match_df %>%
     mutate(ID = id,
            stratum = sample_ids$stratum[sample_ids$ID == id],
-           n_donors = n_donors,
-           final_filter_range = filter_range - FILTER_THRESHOLD
+           # n_donors = n_donors,
+           # final_filter_range = filter_range - FILTER_THRESHOLD
     ) %>%
     mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared, econ = econ, cumulative = CUMULATIVE))
 
@@ -180,8 +182,6 @@ toc()
 
 # Convert back to time series of observed and modeled forest loss for each unit
 
-
-
 write_rds(sc_results, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results.rds"))
 
 sc_df <- sc_results %>%
@@ -193,7 +193,7 @@ sc_df <- sc_results %>%
 
 # Save output
 cumulative_flag <- ifelse(CUMULATIVE == TRUE, "_cumulative", "")
-donor_filter_flag <- ifelse(DONOR_FILTER == TRUE, "_filtered")
+donor_filter_flag <- ifelse(DONOR_FILTER == TRUE, "_filtered", "")
 
 output_filename <- paste0("sc_results_", COUNTRY, "_", START_YEAR, "_", POLY_SIZE, cumulative_flag, donor_filter_flag, ".csv")
 
