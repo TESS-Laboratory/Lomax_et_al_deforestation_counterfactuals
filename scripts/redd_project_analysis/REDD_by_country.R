@@ -7,7 +7,7 @@ library(dplyr)
 library(countrycode)
 
 ####load data ####
-redd_proj <- read_csv("data/REDD_database_no_meta.csv")
+redd_proj <- read_csv("data/raw/csv/REDD_database_no_meta.csv")
 redd_proj$area <- as.numeric(redd_proj$area)  
 redd_proj <- redd_proj %>% 
   rename(country_name = "country name")
@@ -35,4 +35,4 @@ summary_REDD$un.country.code<- countrycode(summary_REDD$country_name, origin = "
 summary_REDD$region<- countrycode(summary_REDD$un.country.code, origin = "un", destination = "region")
 
 #### simplify tables for document ####
-write_csv(summary_REDD, "data/REDD_proj_by_country.csv")
+write_csv(summary_REDD, "data/processed/REDD_proj_by_country.csv")
