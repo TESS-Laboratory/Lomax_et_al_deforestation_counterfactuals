@@ -4,7 +4,6 @@
 source("scripts/load.R")
 
 COUNTRY <- "Cote d'Ivoire"
-AGG <- 5  # Aggregation factor to reduce noise.
 
 # Load
 country <- geodata::gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>%
@@ -20,10 +19,13 @@ worldpop <- get_raster("data/raw/raster/population/worldpop", match = COUNTRY, n
 # Fill gaps by scaling WorldPop values to GlobPop by their respective means
 
 globpop_filled <- map(overlap_years, function(y) {
+  
+  # Subset both datasets to one year
   message("Year: ", y)
   globpop_year <- subset(globpop, str_which(names(globpop), as.character(y)))
   worldpop_year <- subset(worldpop, str_which(names(worldpop), as.character(y)))
   
+  # Crop, mask and resample to the same resolution and extent
   globpop_crop <- crop(globpop_year, worldpop_year)
   
   worldpop_resample <- resample(worldpop_year, globpop_crop)
@@ -32,35 +34,47 @@ globpop_filled <- map(overlap_years, function(y) {
   
   globpop_mask <- mask(globpop_crop, worldpop_mask)
   
+  # Calculate overall scale factor as the ratio between GlobPop and WorldPop in their shared area
   scale_factor <- global(globpop_mask, na.rm = TRUE) / global(worldpop_mask, na.rm = TRUE)
   
+  # Scale WorldPop by scale_factor to "match" GlobPop
   globpop_pred <- scale_factor$mean[1] * worldpop_resample
   
+  # Gapfill GlobPop with Worldpop
   globpop_out <- merge(globpop_year, globpop_pred)
   
   globpop_out
 }) %>% rast()
 
+# Extrapolation of gapfilled areas outside WorldPop data period (i.e., 1991-1999 and 2021-2023)
+
 raster_scale <- function(year, base_rast) {
   message("Processing year: ", year)
   
+  # Extract raw GlobPop raster for given year
   y_rast <- globpop %>%
     subset(str_which(names(globpop), as.character(year)))
   
+  # Mask gapfilled raster for base year to extent of raw GlobPop raster (i.e., remove gaps)
   base_masked <- mask(base_rast, y_rast)
   
+  # Calculate scale factor (ratio of raw to base total population estimate)
   scale_factor <- global(y_rast, na.rm = TRUE) / global(base_rast, na.rm = TRUE)
   
+  # Scale gapfilled areas by scale factor
   y_pred <- scale_factor$mean[1] * base_rast
   
+  # Combine
   y_out <- merge(y_rast, y_pred)
   
   y_out
 }
 
+# Apply function to fill gaps for 1991-1999
 globpop_early <- map(1991:1999, raster_scale, base_rast = globpop_filled$pop_density.2000) %>%
   rast()
 
+# Apply function to fill gaps for 2021-2023
 globpop_late <- map(2021:2023, raster_scale, base_rast = globpop_filled$pop_density.2020) %>%
   rast()
 
@@ -70,50 +84,3 @@ globpop_all <- c(globpop_early, globpop_filled, globpop_late)
 writeRaster(globpop_all, paste0("data/processed/raster/population/", COUNTRY, "_population_gapfilled.tif"))
 
 pushover(message = "Population raster processing complete: ", COUNTRY)
-
-# Scale missing data in previous and subsequent years by mean of GlobPop temporal layers
-# 
-# # Predict GlobPop values for prior years
-# 
-# df_2000 <- globpop_filled$pop_density.2000 %>%
-#   as.data.frame(cells = TRUE)
-# 
-# extrapolate_raster <- function(year, base_raster) {
-#   message("Filing gaps for year ", year)
-#   
-#   base_log <- log(base_raster + 0.01)
-#   
-#   df_base <- as.data.frame(base_log, cells = TRUE) %>%
-#     rename(base = 2)
-#   
-#   globpop_y <- globpop %>%
-#     subset(str_which(names(globpop), as.character(year))) %>%
-#     crop(globpop_filled) %>%
-#     add(0.01) %>%
-#     log()
-#   
-#   df_y <- globpop_y %>%
-#     as.data.frame(cells = TRUE) %>%
-#     rename(y = 2)
-#   
-#   df_joined <- left_join(df_base, df_y)
-#   
-#   mod <- lm(y ~ base, data = df_joined)
-#   
-#   globpop_pred <- coef(mod)[1] + coef(mod)[2] * base_raster
-#   
-#   globpop_out <- merge(globpop_y, globpop_pred) %>%
-#     exp() %>%
-#     subtract(0.01)
-#   
-#   globpop_out
-# }
-# 
-# 
-# globpop_previous <- map(1991:1999, extrapolate_raster, base_raster = globpop_filled$pop_density.2000) %>%
-#   rast()
-# 
-# globpop_next <- map(2021:2023, extrapolate_raster, base_raster = globpop_filled$pop_density.2020) %>%
-#   rast()
-# 
-# globpop_combined <- c()
