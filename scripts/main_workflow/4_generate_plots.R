@@ -59,9 +59,9 @@ sc_results_df <- map(COUNTRIES, function(country) {
   mutate(sc_loss = 100 * sc_loss, loss = 100 * loss)
 
 
-# Variable importance by country
-importance_df <- map(COUNTRIES, function(country) {
-  filepath <- paste0("results/var_importance/", country, "_importance.csv")
+# Variable weights by country
+weights_df <- map(COUNTRIES, function(country) {
+  filepath <- paste0("results/var_weights/", country, "_weights.csv")
   if (file.exists(filepath)) {
     filepath %>%
       read_csv() %>%
@@ -74,20 +74,6 @@ importance_df <- map(COUNTRIES, function(country) {
   bind_rows() %>%
   mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
 
-# Deforestation rates by country (for population-level estimates)
-defor <- map(COUNTRIES, function(country) {
-  country_defor <- map(POLY_SIZE, function(size) {
-    filename <- paste0(country, "_", size, "_", START_YEAR, "_data.rds")
-    df <- read_rds(paste0("data/processed/rds/", filename)) %>% mutate(poly_size = size)
-  }) %>% bind_rows()
-  
-  country_defor <- mutate(country_defor, country = country)
-  
-  country_defor
-}) %>% bind_rows() %>%
-  select(ID, country, poly_size, cum_loss, stratum, starts_with("loss")) %>%
-  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
-
 ## 3. Visualise SC trajectories --------
 
 ## Visualisation theme
@@ -95,14 +81,11 @@ sc_plot_theme <- theme(
   strip.background = element_rect(fill = "white", colour = "white"),
   strip.text = element_text(face = "bold", size = 12),
   legend.position = "bottom",
-  # legend.key.size = unit(1, "cm"),
   legend.text = element_text(size = 12),
   legend.title = element_text(size = 14),
   axis.title = element_text(size = 14),
   axis.text = element_text(size = 12),
   panel.spacing = unit(0.5, "lines")
-  # panel.grid.major = element_blank(),
-  # panel.grid.minor = element_blank(),
 )
 
 
@@ -507,6 +490,20 @@ error_bias_sim <- bind_rows(overall_error_bias_sim, stratum_error_bias_sim) %>%
 
 # Create population-level and stratum-level results
 
+# Deforestation rates by country (for population-level estimates)
+defor <- map(COUNTRIES, function(country) {
+  country_defor <- map(POLY_SIZE, function(size) {
+    filename <- paste0(country, "_", size, "_", START_YEAR, "_data.rds")
+    df <- read_rds(paste0("data/processed/rds/", filename)) %>% mutate(poly_size = size)
+  }) %>% bind_rows()
+  
+  country_defor <- mutate(country_defor, country = country)
+  
+  country_defor
+}) %>% bind_rows() %>%
+  select(ID, country, poly_size, cum_loss, stratum, starts_with("loss")) %>%
+  mutate(country = ifelse(country == "Democratic Republic of the Congo", "DRC", country))
+
 # Assign forest loss strata for all polygons
 defor_long <- defor %>%
   st_drop_geometry() %>%
@@ -723,9 +720,9 @@ bias_by_match_csv <- error_by_match %>%
 write_csv(error_by_match_csv, "results/error_by_match.csv")
 write_csv(bias_by_match_csv, "results/bias_by_match.csv")
 
-## 8. RQ1 - Variable importance by country ----
+## 8. RQ1 - Variable weights by country ----
 
-importance_country <- importance_df %>%
+weights_country <- weights_df %>%
   group_by(variable, country) %>%
   summarise(mean_weight = mean(min.loss.w, na.rm = TRUE),
             median_weight = median(min.loss.w, na.rm = TRUE),
@@ -733,7 +730,7 @@ importance_country <- importance_df %>%
             iqr_weight = IQR(min.loss.w, na.rm = TRUE)) %>%
   ungroup()
 
-importance_ordered_global <- importance_country %>%
+weights_ordered_global <- weights_country %>%
   group_by(variable) %>%
   summarise(mean_country_weight = mean(mean_weight, na.rm = TRUE),
             mean_median_weight = mean(median_weight, na.rm = TRUE)) %>%
@@ -763,7 +760,7 @@ variable_labels <- c(
   dist_to_treated = "Distance to treated unit"
 )
 
-importance_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
+weights_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
                           strip.text = element_text(face = "bold", size = 14),
                           legend.text = element_text(size = 12),
                           legend.title = element_text(size = 14),
@@ -773,21 +770,19 @@ importance_theme <- theme(strip.background = element_rect(fill = "white", colour
 
 # Importance - all strata
 
-importance_viz_country <- importance_country %>%
-  mutate(variable = ordered(variable, levels = importance_ordered_global$variable)) %>%
+weights_viz_country <- weights_country %>%
+  mutate(variable = ordered(variable, levels = weights_ordered_global$variable)) %>%
   ggplot(aes(y = variable)) +
-  # geom_boxplot(aes(x = min.loss.w), coef = 10) +
-  # scale_x_log10() +
   geom_point(aes(x = median_weight), colour = "darkred") +
   # geom_errorbar(aes(xmin = lq_weight, xmax = uq_weight), alpha = 0.6) +
   facet_wrap(~country) +
   theme_bw() +
   scale_y_discrete(labels = variable_labels) +
   labs(x = "Mean weight", y = "Variable") +
-  importance_theme
+  weights_theme
 
-importance_viz_global <- importance_ordered_global %>%
-  mutate(variable = ordered(variable, levels = importance_ordered_global$variable)) %>%
+weights_viz_global <- weights_ordered_global %>%
+  mutate(variable = ordered(variable, levels = weights_ordered_global$variable)) %>%
   group_by(country, variable) %>%
   summarise(mean_weight = mean(min.loss.w)) %>%
   group_by(variable) %>%
@@ -801,12 +796,12 @@ importance_viz_global <- importance_ordered_global %>%
   theme_bw() +
   labs(x = "Mean weight", y = "Variable", fill = "Forest loss\nstratum") +
   scale_y_discrete(labels = variable_labels) +
-  importance_theme
+  weights_theme
 
-importance_viz_all <- importance_viz_global + importance_viz_country +
+weights_viz_all <- weights_viz_global + weights_viz_country +
   plot_layout(ncol = 2, axis_titles = "collect")
 
-ggsave(plot = importance_viz_all, filename = "results/figures/importance_plots/importance_all.png",
+ggsave(plot = weights_viz_all, filename = "results/figures/weights_plots/weights_all.png",
        width = 32, height = 28, units = "cm", dpi = 300)
 
 
@@ -892,14 +887,11 @@ MATCH_SIM <- 5
 line_plot_theme <- theme(strip.background = element_rect(fill = "white", colour = "white"),
                          strip.text = element_text(face = "bold", size = 14),
                          legend.position = "bottom",
-                         # legend.position.inside = c(0.9, 0.25),
                          legend.key.size = unit(1, "cm"),
                          legend.text = element_text(size = 14),
                          legend.title = element_text(size = 16),
                          axis.title = element_text(size = 16),
-                         axis.text = element_text(size = 14),
-                         # panel.grid.major = element_blank(),
-                         # panel.grid.minor = element_blank()
+                         axis.text = element_text(size = 14)
 )
 
 
@@ -936,7 +928,6 @@ stratum_error_match_viz <- ggplot(
   geom_line(alpha = 0.5) +
   theme_bw() +
   facet_wrap(~country, scales = "free", ncol = 5, nrow = 2) +
-  # ylim(0, 6) +
   scale_x_continuous(breaks = seq(0, 24, 4)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Match period (years)", y = "Mean absolute prediction error\n(% of polygon area)", colour = "Forest\nloss stratum") +
@@ -952,7 +943,6 @@ stratum_bias_match_viz <- ggplot(
   geom_line(alpha = 0.5) +
   theme_bw() +
   facet_wrap(~country, scales = "free", ncol = 5, nrow = 2) +
-  # ylim(-6, 6) +
   scale_x_continuous(breaks = seq(0, 24, 4)) +
   scale_colour_brewer(palette = "Set1") +
   labs(x = "Match period (years)", y = "Mean bias\n(% of polygon area)", colour = "Forest\nloss stratum", fill = "Forest\nloss stratum") +
@@ -1343,19 +1333,9 @@ country_synth_weights <- country_synth %>%
   unnest(synth_weights) %>%
   rename(donor_id = ID)
 
-# # Testing
-# country_synth_candidates <- country_synth_weights %>%
-#   group_by(treated_id) %>%
-#   summarise(candidate = (sum(weight > 0.05) > 6) & (sum(weight < -0.1) < 0.2 * n()),
-#             stratum = first(stratum)) %>%
-#   filter(candidate == TRUE)
-# 
-# ggplot(country_synth_weights %>% filter(treated_id %in% country_synth_candidates$treated_id)) +
-#   geom_col(aes(x = weight, y = as.factor(donor_id))) +
-#   facet_wrap(~treated_id) +
-#   theme_classic()
 
-fig_id <- 961 #904
+# ID for project polygon for weight illustration
+fig_id <- 961
 
 # Panel A: Potential donor polygons
 
