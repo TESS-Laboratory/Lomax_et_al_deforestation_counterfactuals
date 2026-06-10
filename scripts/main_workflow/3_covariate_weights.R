@@ -1,6 +1,19 @@
 #### Data analysis script
-#### Fits standard synthetic controls for sample polygon data and extracts
-#### assigned covariate weights.
+#### Fits standard synthetic controls for sample polygon data (using MSCMT package)
+#### and extracts assigned covariate weights.
+#### NB: These results are reported in Supplementary Table 12 only because of the
+#### risk of misinterpretation and do not form part of the core analysis.
+
+# Instructions
+## To run from terminal go to project directory and use syntax:
+
+# "nohup Rscript scripts/3_covariate_weights.R [COUNTRY] [MAX_POOL] [N_CORES] [ECON] &> [out_file] &"
+# e.g.,
+# "nohup Rscript scripts/2_fit_synthetic_controls.R "Cote d'Ivoire" 1000 4 0 &> cotedivoire.out &"
+# logicals should be entered as 1/0, not TRUE/FALSE or T/F
+
+#### Guy Lomax
+#### G.Lomax@exeter.ac.uk
 
 source("scripts/load.R")
 
@@ -15,7 +28,7 @@ SIMULATIONS <- 5  # Simulations to run
 ECON <- TRUE  # Economic data present for country
 SEED <- 1471
 MAX_POOL <- 100  # Max number of potential donor polygons to constrain 
-N_CORES <- 8
+N_CORES <- 4
 
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
@@ -37,8 +50,6 @@ if (N_CORES > 1) {
 }
 
 ### 2. Load data
-## To fix tomorrow - now have the geoms attached to grid_data, which is in wide format
-## so need to extract them and then again pivot_longer and separate_wider_delim...
 grid_data <- read_rds(paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
 
 ### 3. Prepare data and run analysis
@@ -101,16 +112,16 @@ sc_results <- future_map(sample_ids$ID, .options = furrr_options(seed = TRUE), .
 
 # Convert back to time series of observed and modelled forest loss for each unit
 
-variable_importance_df <- sc_results %>%
+variable_weights_df <- sc_results %>%
   bind_rows() %>%
-  mutate(sc_results = map(synth, extract_synth_importance)) %>%
+  mutate(sc_results = map(synth, extract_synth_weights)) %>%
   select(-synth) %>%
   unnest(sc_results)
 
-write_csv(variable_importance_df,
-          paste0("results/var_importance/", COUNTRY, "_importance.csv"))
+write_csv(variable_weights_df,
+          paste0("results/var_weights/", COUNTRY, "_weights.csv"))
 
-message("Written to disk: ", COUNTRY, "_importance.csv")
+message("Written to disk: ", COUNTRY, "_weights.csv")
 
 # # Send notification
-# pushover(paste0("Variable importance analysis completed: ", COUNTRY))
+# pushover(paste0("Variable weights analysis completed: ", COUNTRY))
