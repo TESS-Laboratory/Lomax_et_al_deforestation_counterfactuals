@@ -1,11 +1,9 @@
-# Script to combine and evaluate REDD project polygon data
+# Script to combine and clean REDD project polygon data from Karnik et al.
+# (2025) dataset (referred to below as the "renoster" dataset)
 
-library(readxl)
 library(dplyr)
 library(readr)
 library(sf)
-library(tmap)
-library(purrr)
 
 source("R/read_data.R")
 
