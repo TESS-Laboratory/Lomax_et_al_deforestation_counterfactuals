@@ -1,6 +1,6 @@
 #### Data analysis script
-#### Fits augmented synthetic controls for sample polygon data and writes the
-#### results to disk as a CSV.
+#### Fits standard synthetic controls for sample polygon data and extracts
+#### assigned covariate weights.
 
 source("scripts/load.R")
 

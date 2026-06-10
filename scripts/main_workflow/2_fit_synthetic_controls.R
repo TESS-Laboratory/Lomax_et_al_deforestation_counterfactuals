@@ -8,9 +8,9 @@
 # Instructions
 ## To run from terminal go to project directory and use syntax:
 
-# "nohup Rscript scripts/analysis.R [COUNTRY] [POLY_SIZE] [START_YEAR] [MAX_POOL] [N_CORES] &> [out_file] &"
+# "nohup Rscript scripts/2_fit_synthetic_controls.R [COUNTRY] [POLY_SIZE] [START_YEAR] [MAX_POOL] [N_CORES] &> [out_file] &"
 # e.g.,
-# "nohup Rscript scripts/analysis.R "Cote d'Ivoire" 60000 1000 2016 16 &> cotedivoire.out &"
+# "nohup Rscript scripts/2_fit_synthetic_controls.R "Cote d'Ivoire" 60000 1000 2016 16 &> cotedivoire.out &"
 # logicals should be entered as 1/0, not TRUE/FALSE or T/F
 
 source("scripts/load.R")
@@ -29,7 +29,7 @@ DONOR_FILTER <- FALSE  # Filter donor pool based on prior buffer deforestation r
 FILTER_START <- 2009  # Start year for calculating prior buffer deforestation rates
 FILTER_THRESHOLD <- 0.1  # fractional range to filter prior buffer deforestation rates
 N_CORES <- 1
-CUMULATIVE <- FALSE  # Use cumulative rather than annual deforestation to fit
+CUMULATIVE <- FALSE  # Use cumulative rather than annual deforestation to fit?
 
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
@@ -76,21 +76,21 @@ sample_ids <- grid_data %>%
   filter(!is.na(stratum)) %>%
   mutate(n_donors = NA, final_filter_range = NA)
 
-# # Filter potential donors based on prior deforestation rates or MAX_POOL
-# if (nrow(grid_data) > MAX_POOL) {
-#   message("Donor pool too large; reducing to ", MAX_POOL)
-# 
-#   n_sample <- nrow(sample_ids)
-#   grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
-# 
-#   set.seed(SEED)
-#   n_pool <- MAX_POOL - n_sample
-#   grid_data_pool <- grid_data %>%
-#     filter(!(ID %in% sample_ids$ID)) %>%
-#     slice_sample(n = n_pool)
-# 
-#   grid_data <- bind_rows(grid_data_sample, grid_data_pool)
-# }
+# Filter potential donors based on MAX_POOL
+if (nrow(grid_data) > MAX_POOL) {
+  message("Donor pool too large; reducing to ", MAX_POOL)
+
+  n_sample <- nrow(sample_ids)
+  grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
+
+  set.seed(SEED)
+  n_pool <- MAX_POOL - n_sample
+  grid_data_pool <- grid_data %>%
+    filter(!(ID %in% sample_ids$ID)) %>%
+    slice_sample(n = n_pool)
+
+  grid_data <- bind_rows(grid_data_sample, grid_data_pool)
+}
 
 # Loop through sample to perform analysis
 Sys.time()
@@ -156,19 +156,14 @@ sc_results <- future_map(sample_ids$ID, function(id) {
     
     grid_data_prepared <- filter(grid_data_prepared, ID %in% c(id, donors_filtered$ID))
     
-  } else {
-    n_donors <- length(unique(grid_data_prepared$ID)) - 1
   }
-  
   
   # Run synthetic controls for different simulations
   
   message("Fitting synthetic control: ID = ", id)
   sim_df <- simulation_match_df %>%
     mutate(ID = id,
-           stratum = sample_ids$stratum[sample_ids$ID == id],
-           # n_donors = n_donors,
-           # final_filter_range = filter_range - FILTER_THRESHOLD
+           stratum = sample_ids$stratum[sample_ids$ID == id]
     ) %>%
     mutate(synth = map2(sim, match, run_synthetic_control, data = grid_data_prepared, econ = econ, cumulative = CUMULATIVE))
 
@@ -201,6 +196,6 @@ write_csv(sc_df, paste0("results/sc_results/", output_filename))
 
 cat("Results written to ", output_filename)
 
-# Send notification
-pushover(message = paste0("SC analysis complete: ", COUNTRY, ". Start year: ", START_YEAR))
+# # Send notification
+# pushover(message = paste0("SC analysis complete: ", COUNTRY, ". Start year: ", START_YEAR))
 
