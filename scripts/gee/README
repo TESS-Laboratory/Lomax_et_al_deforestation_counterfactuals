@@ -1,0 +1,12 @@
+The country_data_export file contains the Google Earth Engine script used to find
+and export the following key datasets for each country in the study:
+
+1. Tropical moist forests (TMF) - forest cover and deforestation
+2. Climate hazards infrared precipitation with stations (CHIRPS) - precipitation
+3. ERA5-Land - mean air temperature
+4. World database on protected areas (WDPA) - Protected area extent
+
+The script can also be accessed and run at the following URL with an active
+Google Earth Engine account:
+
+https://code.earthengine.google.com/?accept_repo=users/guylomax01/Lomax_deforestation_counterfactuals

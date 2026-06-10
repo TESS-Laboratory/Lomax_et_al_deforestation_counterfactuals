@@ -1,0 +1,220 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var countries = ee.FeatureCollection("FAO/GAUL/2015/level0"),
+    chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY"),
+    era5 = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR"),
+    pas = ee.FeatureCollection("WCMC/WDPA/current/polygons");
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+//// Prepares GEE-hosted raster and vector data for export, either globally (for vector data) or for a specified target country (for raster data).
+
+//// 1. Define parameters
+var COUNTRY_NAME = "Brazil";  // Country name in FAO GAUL dataset
+var COUNTRY_FILENAME = "Brazil";  // Country name to use in exported data filenames
+var START_YEAR = 1990;  // First year of data
+var END_YEAR = 2023;  // Last year of data
+var CLIMATE_NORMAL_START = 1991;  // First year of 30-year climate normal period
+var CLIMATE_NORMAL_END = 2020;  // Last year of climate normal period
+var AGG = 5;  // Aggregation factor for large rasters
+
+//// 2. Prepare forest cover data
+
+// Load Vincutsem et al. (2019) annual Tropical Moist Forest classification dataset (v2023)
+var tmfAnnualChanges = ee.ImageCollection('projects/JRC/TMF/v1_2023/AnnualChanges');
+var tmfDeforestationYear = ee.ImageCollection('projects/JRC/TMF/v1_2023/DeforestationYear');
+
+var tmfAnnualChangesMerged = tmfAnnualChanges.mosaic();
+var tmfDeforestationYearMerged = tmfDeforestationYear.mosaic().selfMask();
+
+var tmfProj = tmfAnnualChanges.first().projection();
+
+
+var countryList = countries.aggregate_array("ADM0_NAME").sort();
+print("Country names", countryList);
+
+var country = ee.Feature(countries.filter(ee.Filter.eq("ADM0_NAME", COUNTRY_NAME)).first());
+
+Map.addLayer(country);
+Map.centerObject(country, 4);
+
+// Binary forest cover
+var tmfBinary = tmfAnnualChangesMerged
+  .eq(1)                                    // Undisturbed tropical moist forest
+  .or(tmfAnnualChangesMerged.eq(2))         // Degraded tropical moist forest
+  .or(tmfAnnualChangesMerged.eq(4));        // Forest regrowth
+
+var tmfBinaryAgg = tmfBinary
+  .setDefaultProjection(tmfProj)
+  .reduceResolution({
+    reducer: ee.Reducer.mean(),
+    bestEffort: false,
+    maxPixels: 1024
+  });
+
+// Binary deforestation map
+
+var previousYear = tmfAnnualChangesMerged.select(ee.List.sequence(0, 32));
+var currentYear = tmfAnnualChangesMerged.select(ee.List.sequence(1, 33));
+
+var annualTransitions = previousYear
+  .multiply(10)
+  .add(currentYear);
+
+print(annualTransitions);
+
+var forestLossBinary = annualTransitions.eq(13)   // Intact forest to deforested
+  .or(annualTransitions.eq(23))                   // Degraded to deforested
+  .or(annualTransitions.eq(43));                  // Regrowth to deforested
+
+// Create version for aggregated export (mainly for Brazil)
+
+var forestLossAgg = forestLossBinary
+  .setDefaultProjection(tmfProj)
+  .reduceResolution({
+    reducer: ee.Reducer.mean(),
+    bestEffort: false,
+    maxPixels: 1024
+  });
+
+//// 4. Prepare other datasets
+// Map over year list
+var climateYearList = ee.List.sequence(CLIMATE_NORMAL_START, CLIMATE_NORMAL_END);
+
+// Mean annual precipitation
+var pptAnnual = ee.ImageCollection(climateYearList.map(function(y) {
+  y = ee.Number(y);
+  
+  var pptYear = chirps
+    .filter(ee.Filter.calendarRange(y, y, "year"))
+    .sum();
+  
+  return pptYear
+    .set("year", y);
+}));
+
+var pptAnnualMean = pptAnnual.mean();
+
+// Mean annual temperature
+var tMeanAnnual = ee.ImageCollection(climateYearList.map(function(y) {
+  y = ee.Number(y);
+  
+  var tMeanYear = era5
+    .select("temperature_2m")
+    .filter(ee.Filter.calendarRange(y, y, "year"))
+    .mean();
+  
+  return tMeanYear
+    .set("year", y);
+}));
+
+var tMean = tMeanAnnual
+  .mean()
+  .add(273.15);
+
+// Cropland
+var cropland = ee.ImageCollection("users/potapovpeter/Global_cropland_2015");
+
+// Global protected areas
+var pas_country = pas
+  .filterBounds(country.geometry())
+  .filter(ee.Filter.neq("MARINE", 2));
+
+//// 4. Export to drive
+
+Export.image.toDrive({
+  image: tmfAnnualChangesMerged,
+  description: "TMFAnnualClasses_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: tmfProj.crs().getInfo(),
+  scale: tmfProj.nominalScale().getInfo(),
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+});
+
+Export.image.toDrive({
+  image: tmfBinary,
+  description: "TMFBinary_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: tmfProj.crs().getInfo(),
+  scale: tmfProj.nominalScale().getInfo(),
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+});
+
+Export.image.toDrive({
+  image: tmfBinaryAgg,
+  description: "TMFBinaryAgg" + AGG + "_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: tmfProj.crs().getInfo(),
+  scale: tmfProj.nominalScale().getInfo() * AGG,
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+})
+
+Export.image.toDrive({
+  image: forestLossBinary,
+  description: "TMFForestLossBinary_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: tmfProj.crs().getInfo(),
+  scale: tmfProj.nominalScale().getInfo(),
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+});
+
+Export.image.toDrive({
+  image: forestLossAgg,
+  description: "TMFForestLossAgg" + AGG + "_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: tmfProj.crs().getInfo(),
+  scale: tmfProj.nominalScale().getInfo() * AGG,
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+})
+
+// Export.image.toDrive({
+//   image: tmfStartYear,
+//   description: "TMF" + START_YEAR,
+//   folder: "deforestation_counterfactuals",
+//   crs: tmfProj.crs().getInfo(),
+//   scale: tmfProj.nominalScale().getInfo(),
+//   region: country.geometry().bounds(),
+//   maxPixels: 1e12
+// });
+
+var chirpsProj = chirps.first().projection().getInfo();
+Export.image.toDrive({
+  image: pptAnnualMean,
+  description: "ppt_mean_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: chirpsProj.crs,
+  crsTransform: chirpsProj.transform,
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+});
+
+var era5Proj = era5.first().projection().getInfo();
+Export.image.toDrive({
+  image: tMean,
+  description: "tMean_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: era5Proj.crs,
+  crsTransform: era5Proj.transform,
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+});
+
+var croplandProj = cropland.first().projection().getInfo();
+Export.image.toDrive({
+  image: cropland.mosaic(),
+  description: "cropland_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  crs: croplandProj.crs,
+  crsTransform: croplandProj.transform,
+  region: country.geometry().bounds(),
+  maxPixels: 1e12
+});
+
+Export.table.toDrive({
+  collection: pas_country,
+  description: "PAs_" + COUNTRY_FILENAME,
+  folder: "deforestation_counterfactuals",
+  fileFormat: "GeoJSON"
+});
