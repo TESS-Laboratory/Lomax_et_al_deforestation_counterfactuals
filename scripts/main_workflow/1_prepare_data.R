@@ -1,6 +1,16 @@
 #### Data preparation script
 #### Generates a grid of a specified area and extracts key covariates into a dataframe
 
+#### Guy Lomax
+#### G.Lomax@exeter.ac.uk
+
+# Instructions
+## To run from terminal go to project directory and use syntax:
+
+# "nohup Rscript scripts/1_prepare_data.R [COUNTRY] [START_YEAR] [AGG] [TILE] &> [out_file] &"
+# e.g.,
+# "nohup Rscript scripts/1_prepare_data.R "Cote d'Ivoire" 2016 5 1 &> cotedivoire.out &"
+
 source("scripts/load.R")
 
 ### 1. Set parameters --------
@@ -25,14 +35,13 @@ FOREST_EDGE_AREA <- 10 # Minimum continuous nonforest area to define as forest e
 # Data processing
 SEED <- 111  # Random number seed
 AGG <- 5  # Factor to aggregate rasters to speed data processing
-TILE <- 1  # Number of tiles to break study area into for STAC downloads
+TILE <- 1  # Number of tiles to break study area into for STAC downloads (try >1 for large countries)
 
 # Get parameters from command line if running from terminal
 cmd_args <- commandArgs(TRUE)
 
 if (length(cmd_args) == 4) {
   COUNTRY <- cmd_args[1]
-  # POLY_SIZE <- cmd_args[2]
   START_YEAR <- cmd_args[2] %>% as.numeric()
   AGG <- cmd_args[3] %>% as.numeric()
   TILE <- cmd_args[4] %>% as.numeric()
@@ -133,6 +142,7 @@ print("Calculating distance to forest edge...")
 fc_start_agg <- aggregate(fc_start, fact = AGG, fun = "modal")
 fc_start_ea <- project(fc_start_agg, CRS, method = "near")
 
+# Identify all continuous "patches" of nonforest land
 non_forest_patches <- landscapemetrics::get_patches(
   fc_start_ea,
   class = 0
@@ -140,6 +150,7 @@ non_forest_patches <- landscapemetrics::get_patches(
 
 names(non_forest_patches) <- "patch"
 
+# Extract area of each patch
 tic()
 patch_area <- fc_start_ea %>%
   lsm_p_area() %>%
@@ -147,7 +158,8 @@ patch_area <- fc_start_ea %>%
   select(id, value)
 toc()
 
-# Reclassify nonforest patch values to area
+# Filter to patches > FOREST_EDGE_AREA and reclassify patch raster values to area
+# This also reclassifies pixels in smaller patches to NA (i.e., not considered forest edge)
 patch_area_large <- filter(patch_area, value >= FOREST_EDGE_AREA)
 
 tic()
@@ -229,7 +241,7 @@ if(nrow(econ_vars) > 0) {
 
 print("Calculating distance to rivers and roads")
 
-# Rasterize datasets
+# Rasterize datasets to simplify distance calculation
 tic(); rivers_rast <- rasterize_lines(rivers, fc_start_ea); toc()
 tic(); roads_rast_grip <- rasterize_lines(roads_grip, fc_start_ea); toc()
 tic(); roads_rast_osm <- rasterize_lines(roads_osm, fc_start_ea); toc()
@@ -375,7 +387,6 @@ for (i in POLY_SIZE) {
     select(-buffer_cropland)
   
   ### 8. Take stratified sample of polygons by actual cumulative deforestation after start year --------
-  # TO DO: REWRITE OR REPACKAGE IN FUNCTION
   
   print("Calculating forest loss bins and generating stratified sample...")
   
