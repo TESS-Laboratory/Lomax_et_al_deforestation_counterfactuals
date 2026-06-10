@@ -111,4 +111,6 @@ write_csv(variable_importance_df,
           paste0("results/var_importance/", COUNTRY, "_importance.csv"))
 
 message("Written to disk: ", COUNTRY, "_importance.csv")
-pushover(paste0("Variable importance analysis completed: ", COUNTRY))
+
+# # Send notification
+# pushover(paste0("Variable importance analysis completed: ", COUNTRY))

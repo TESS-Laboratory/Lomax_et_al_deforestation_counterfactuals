@@ -415,4 +415,5 @@ for (i in POLY_SIZE) {
   cat("Output written to disk as ", filepath)
 }
 
-pushover(message = paste0("Processing complete: ", COUNTRY))
+# # Send notification
+# pushover(message = paste0("Processing complete: ", COUNTRY))
