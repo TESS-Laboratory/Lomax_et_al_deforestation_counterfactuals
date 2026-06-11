@@ -9,7 +9,7 @@ source("R/read_data.R")
 
 sf_use_s2(FALSE)
 
-renoster <- read_csv("data/raw/csv/carbon_projects_database_index.csv")
+renoster <- read_csv("data/raw/csv/redd_projects/carbon_projects_database_index.csv")
 
 cols_keep_renoster <- c("ProjectID", "Project Name", "Country", "Continent")
 
