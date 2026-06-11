@@ -1,14 +1,22 @@
 ###### Script to create a table of REDD+ projects by country #####
 #### set up environment ####
-# install.packages("tidyverse")
-# install.packages("countrycode")
+
 library(readr)
 library(dplyr)
 library(countrycode)
 
 ####load data ####
-redd_proj <- read_csv("data/raw/csv/REDD_database_no_meta.csv")
-redd_proj$area <- as.numeric(redd_proj$area)  
+redd_proj <- readxl::read_xlsx("data/raw/csv/redd_projects/ID-RECCO V5.0_20231201_final data_project.xlsx",
+                               sheet = "01_Projects",
+                               skip = 1,
+                               na = "ND")[-1,] %>%
+  mutate(across(everything(), parse_guess))
+
+# Convert area to numeric (after removing whitespace and comma separators)
+redd_proj$area <- redd_proj$area %>%
+  str_trim() %>%
+  str_replace_all(",", "") %>%
+  as.numeric()  
 redd_proj <- redd_proj %>% 
   rename(country_name = "country name")
 
@@ -35,4 +43,4 @@ summary_REDD$un.country.code<- countrycode(summary_REDD$country_name, origin = "
 summary_REDD$region<- countrycode(summary_REDD$un.country.code, origin = "un", destination = "region")
 
 #### simplify tables for document ####
-write_csv(summary_REDD, "data/processed/REDD_proj_by_country.csv")
+write_csv(summary_REDD, "data/processed/csv/REDD_proj_by_country.csv")
