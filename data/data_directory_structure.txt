@@ -1,0 +1,42 @@
+├───data
+│   ├───processed
+│   │   ├───csv
+│   │   ├───raster
+│   │   │   ├───population
+│   │   │   └───tmf
+│   │   ├───rds
+│   │   ├───tmp
+│   │   └───vector
+│   └───raw
+│       ├───csv
+│       │   ├───DOSE
+│       │   └───redd_projects
+│       ├───raster
+│       │   ├───agricultural_suitability
+│       │   │   └───1980-2009_hist_i
+│       │   ├───chirps
+│       │   ├───cropland
+│       │   ├───dem
+│       │   ├───era5
+│       │   ├───hgb
+│       │   ├───population
+│       │   │   └───globpop
+│       │   │   └───worldpop
+│       │   ├───tmf
+│       │   ├───tmf_binary
+│       │   ├───tmf_binary_agg
+│       │   ├───tmf_loss
+│       │   ├───tmf_loss_agg
+│       │   └───travel_time
+│       └───vector
+│           ├───ecoregions2017
+│           ├───gadm
+│           │   └───gadm
+│           ├───GRIP_roads
+│           ├───Lin2021_rivers
+│           │   ├───africa
+│           │   ├───asia
+│           │   └───south_america
+│           ├───osm
+│           ├───protected_areas
+│           └───redd_polygons
