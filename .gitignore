@@ -10,6 +10,5 @@ data/raw/csv/*
 results/
 *.out
 # Except these files
-!data/REDD_database.xlsx
 !data/raw/csv/data_lookup.csv
 !data/raw/csv/simulation_list_60000.csv
