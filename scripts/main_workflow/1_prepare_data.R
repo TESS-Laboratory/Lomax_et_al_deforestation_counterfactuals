@@ -94,7 +94,7 @@ ag_suitability <- get_raster(
   ext = ".bil",
   names = "ag_suitability")
 travel_time <- get_raster("data/raw/raster/travel_time", names = c("time_to_city", "time_to_port"))
-population <- get_raster("data/raw/raster/population", names = paste0("pop_density.", 1991:2023))
+population <- get_raster("data/raw/raster/population/globpop", names = paste0("pop_density.", 1991:2023))
 
 # Replace with gapfilled population raster if present
 population_fill <- safely(get_raster, otherwise = NULL)("data/processed/raster/population", match = COUNTRY, source = "country")$result
