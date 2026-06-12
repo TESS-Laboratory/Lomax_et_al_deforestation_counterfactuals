@@ -6,13 +6,14 @@ source("scripts/load.R")
 COUNTRY <- "Cote d'Ivoire"
 
 # Load
+data_lookup <- read_csv("data/raw/csv/data_lookup.csv")
 country <- geodata::gadm(COUNTRY, level = 0, path = "data/raw/vector/gadm") %>%
   st_as_sf()
 country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>%
   st_as_sf() %>%
   select(NAME_1, GID_1, geometry)
 overlap_years <- 2000:2020
-globpop <- get_raster("data/raw/raster/population", names = paste0("pop_density.", 1991:2023))
+globpop <- get_raster("data/raw/raster/population/globpop", names = paste0("pop_density.", 1991:2023))
 worldpop <- get_raster("data/raw/raster/population/worldpop", match = COUNTRY, names = paste0("pop_density.", 2000:2020), source = "worldpop")
 
 

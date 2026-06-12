@@ -63,7 +63,7 @@ if (N_CORES > 1) {
 }
 
 ### 2. Load data
-grid_data <- read_rds(paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
+grid_data <- read_rds(paste0("data/processed/rds/country_polygon_data/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
 
 # Test if econ data is present in dataset
 econ <- max(str_detect(colnames(grid_data), "grp_pc_usd_2015|ag_grp_frac"))
@@ -177,7 +177,7 @@ toc()
 
 # Convert back to time series of observed and modeled forest loss for each unit
 
-write_rds(sc_results, paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results.rds"))
+write_rds(sc_results, paste0("data/processed/rds/sc_fits/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_sc_results.rds"))
 
 sc_df <- sc_results %>%
   bind_rows() %>%

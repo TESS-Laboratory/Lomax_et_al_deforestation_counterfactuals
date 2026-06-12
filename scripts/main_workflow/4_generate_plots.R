@@ -494,7 +494,7 @@ error_bias_sim <- bind_rows(overall_error_bias_sim, stratum_error_bias_sim) %>%
 defor <- map(COUNTRIES, function(country) {
   country_defor <- map(POLY_SIZE, function(size) {
     filename <- paste0(country, "_", size, "_", START_YEAR, "_data.rds")
-    df <- read_rds(paste0("data/processed/rds/", filename)) %>% mutate(poly_size = size)
+    df <- read_rds(paste0("data/processed/rds/country_polygon_data", filename)) %>% mutate(poly_size = size)
   }) %>% bind_rows()
   
   country_defor <- mutate(country_defor, country = country)
@@ -1239,7 +1239,7 @@ ggsave("results/figures/scatter_plots/filtered_vs_unfiltered_bias.png",
 data_lookup <- read_csv("data/raw/csv/data_lookup.csv")
 
 # Load country boundary, protected areas and FC raster
-EXAMPLE_COUNTRY <- "Brazil"
+EXAMPLE_COUNTRY <- "Bolivia"
 CRS <- "ESRI:54034"
 
 country_poly <- gadm(EXAMPLE_COUNTRY, level = 0, path = "data/raw/vector/gadm") %>%
@@ -1298,7 +1298,7 @@ protected_areas <- get_vector("data/raw/vector/protected_areas", match = EXAMPLE
   mutate(type = "PA designated post-1991") %>%
   filter(STATUS_YR >= 1991 & MARINE == 0) %>%
   st_intersection(country_poly)
-redd_projects <- st_read("data/processed/vector/redd_polys_renoster.gpkg") %>%
+redd_projects <- st_read("data/processed/vector/redd_polygons/redd_polys_renoster.gpkg") %>%
   filter(Country == EXAMPLE_COUNTRY) %>%
   st_transform(CRS) %>%
   mutate(type = "Existing REDD+ Project") %>%
@@ -1308,19 +1308,19 @@ protected_polys <- bind_rows(redd_projects, protected_areas)
 
 # Load polygons
 
-country_donors <- paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_data.rds") %>%
+country_donors <- paste0("data/processed/rds/country_polygon_data/", EXAMPLE_COUNTRY, "_60000_2016_data.rds") %>%
   read_rds() %>%
   select(ID, fc_start, stratum, x) %>%
   mutate(type = "Donor polygons")
 
 # Load results
 
-country_data <- read_rds(paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_data.rds"))
+country_data <- read_rds(paste0("data/processed/rds/country_polygon_data/", EXAMPLE_COUNTRY, "_60000_2016_data.rds"))
 
 country_results <- sc_results_df %>%
   filter(country == EXAMPLE_COUNTRY & sim == 4 & match == 8 & poly_size == 60000)
 
-country_synth <- paste0("data/processed/rds/", EXAMPLE_COUNTRY, "_60000_2016_sc_results.rds") %>%
+country_synth <- paste0("data/processed/rds/sc_fits/", EXAMPLE_COUNTRY, "_60000_2016_sc_results.rds") %>%
   read_rds() %>%
   bind_rows() %>%
   filter(match == 8 & sim == 4) %>%

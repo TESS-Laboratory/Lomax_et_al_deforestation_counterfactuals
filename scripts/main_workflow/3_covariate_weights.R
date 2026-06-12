@@ -49,7 +49,7 @@ if (N_CORES > 1) {
 }
 
 ### 2. Load data
-grid_data <- read_rds(paste0("data/processed/rds/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
+grid_data <- read_rds(paste0("data/processed/rds/country_polygon_data/", COUNTRY, "_", POLY_SIZE, "_", START_YEAR, "_data.rds"))
 
 # Test if econ data is present in dataset
 econ <- max(str_detect(colnames(grid_data), "grp_pc_usd_2015|ag_grp_frac"))
@@ -62,21 +62,21 @@ sample_ids <- grid_data %>%
   filter(!is.na(stratum)) %>%
   mutate(n_donors = NA, final_filter_range = NA)
 
-# # Reduce potential donors for large donor pools
-# if (nrow(grid_data) > MAX_POOL) {
-#   message("Donor pool too large; reducing to ", MAX_POOL)
-#   
-#   n_sample <- nrow(sample_ids)
-#   grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
-#   
-#   set.seed <- SEED
-#   n_pool <- MAX_POOL - n_sample
-#   grid_data_pool <- grid_data %>%
-#     filter(!(ID %in% sample_ids$ID)) %>%
-#     slice_sample(n = n_pool)
-#   
-#   grid_data <- bind_rows(grid_data_sample, grid_data_pool)
-# }
+# Reduce potential donors for large donor pools
+if (nrow(grid_data) > MAX_POOL) {
+  message("Donor pool too large; reducing to ", MAX_POOL)
+
+  n_sample <- nrow(sample_ids)
+  grid_data_sample <- filter(grid_data, ID %in% sample_ids$ID)
+
+  set.seed <- SEED
+  n_pool <- MAX_POOL - n_sample
+  grid_data_pool <- grid_data %>%
+    filter(!(ID %in% sample_ids$ID)) %>%
+    slice_sample(n = n_pool)
+
+  grid_data <- bind_rows(grid_data_sample, grid_data_pool)
+}
 
 # Loop through sample to perform analysis
 set.seed(SEED)

@@ -16,7 +16,7 @@ source("scripts/load.R")
 ### 1. Set parameters --------
 
 # Spatial and temporal range
-COUNTRY <- "Cote d'Ivoire"  # Target country
+COUNTRY <- "Colombia"  # Target country
 CRS <- "ESRI:54034"  # CRS to generate grid
 START_YEAR <- 2016  # Simulated start year of protection project
 
@@ -67,7 +67,7 @@ country_adm1 <- gadm(COUNTRY, level = 1, path = "data/raw/vector/gadm") %>%
   st_transform(CRS) %>%
   select(NAME_1, geometry) %>%
   mutate(NAME_1 = simplify_string(NAME_1))
-econ_vars <- read_csv("data/raw/csv/DOSE_V2.csv") %>%
+econ_vars <- read_csv("data/raw/csv/DOSE/DOSE_V2.csv") %>%
   filter(country == COUNTRY) %>%
   select(region, year, pop, grp_pc_usd_2015, ag_grp_pc_usd_2015) %>%
   filter(year >= 1991 & year <= START_YEAR) %>%
@@ -409,7 +409,7 @@ for (i in POLY_SIZE) {
   grid_vars_sample <- left_join(grid_fc_all_vars, grid_sample_ids)
   
   ### 8. Save data
-  filepath <- paste0("data/processed/rds/", COUNTRY, "_", i, "_", START_YEAR, "_data.rds")
+  filepath <- paste0("data/processed/rds/country_polygon_data/", COUNTRY, "_", i, "_", START_YEAR, "_data.rds")
   write_rds(grid_vars_sample, filepath)
   
   cat("Output written to disk as ", filepath)
