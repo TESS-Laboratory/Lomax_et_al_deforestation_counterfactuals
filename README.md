@@ -13,7 +13,7 @@ This repository contains the code for a global assessment of the performance of 
 
 The experimental design for this study was pre-registered with the Open Science Framework (https://osf.io/w57a2). 
 
-The codebase used for processing, analysing and visualising these data will  archived with Zenodo at DOI:XXXXXXXXXXX and also at https://github.com/TESS-Laboratory/Lomax_et_al_deforestation_counterfactuals. 
+The codebase used for processing, analysing and visualising these data will archived with Zenodo at DOI:10.5281/zenodo.18671478. and also at https://github.com/TESS-Laboratory/Lomax_et_al_deforestation_counterfactuals. 
 
 All input datasets used in this study are publicly available from the cited sources. Key output datasets generated during the analysis are also provided on Zenodo (https://doi.org/10.5281/zenodo.20641864) to facilitate reproduction of results and figures.
 
